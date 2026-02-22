@@ -8,7 +8,7 @@ android {
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.androtrack"
+        applicationId "de.codevoid.androtrack"
         minSdk 26
         targetSdk 34
         versionCode 1
