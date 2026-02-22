@@ -26,7 +26,7 @@ object GpxMerger {
     fun merge(files: List<File>, outputDir: File): File? {
         if (files.isEmpty()) return null
 
-        val fileTracks = files.map { file -> parsePoints(file) }.filter { it.isNotEmpty() }
+        val fileTracks = files.mapNotNull { file -> parsePoints(file).takeIf { it.isNotEmpty() } }
 
         if (fileTracks.isEmpty()) return null
 
