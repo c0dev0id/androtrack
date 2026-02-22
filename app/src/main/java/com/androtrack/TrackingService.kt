@@ -57,6 +57,10 @@ class TrackingService : Service() {
         private const val LOCATION_INTERVAL_MS = 200L  // 5 Hz; hardware delivers at fastest available rate if slower
         private const val LOCATION_MIN_DISTANCE = 0f
         private const val STATS_UPDATE_INTERVAL_MS = 1000L
+
+        @Volatile
+        var isRunning = false
+            private set
     }
 
     data class GpxTrackPoint(
@@ -189,6 +193,7 @@ class TrackingService : Service() {
         handler.removeCallbacks(stopTimer)
         handler.removeCallbacks(statsUpdater)
         if (isRecording) stopRecording()
+        isRunning = false
         unregisterMotionSensor()
         stopLocationUpdates()
         releaseWakeLock()
@@ -243,6 +248,7 @@ class TrackingService : Service() {
 
     private fun startRecording() {
         isRecording = true
+        isRunning = true
         trackPoints.clear()
         recordingStartMs = System.currentTimeMillis()
         // Reset GPS stats
@@ -267,6 +273,7 @@ class TrackingService : Service() {
 
     private fun stopRecording() {
         isRecording = false
+        isRunning = false
         handler.removeCallbacks(stopTimer)
         handler.removeCallbacks(statsUpdater)
         stopLocationUpdates()

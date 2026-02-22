@@ -26,15 +26,9 @@ object GpxMerger {
     fun merge(files: List<File>, outputDir: File): File? {
         if (files.isEmpty()) return null
 
-        val allPoints = mutableListOf<RawPoint>()
+        val fileTracks = files.map { file -> parsePoints(file) }.filter { it.isNotEmpty() }
 
-        for (file in files) {
-            allPoints.addAll(parsePoints(file))
-        }
-
-        if (allPoints.isEmpty()) return null
-
-        allPoints.sortBy { it.timeMs }
+        if (fileTracks.isEmpty()) return null
 
         val outName = "merged_${fileNameFormat.format(Date())}.gpx"
         val outFile = File(outputDir, outName)
@@ -44,36 +38,40 @@ object GpxMerger {
             writer.newLine()
             writer.write("""<gpx version="1.1" creator="AndroTrack" xmlns="http://www.topografix.com/GPX/1/1">""")
             writer.newLine()
-            writer.write("  <trk>")
-            writer.newLine()
-            writer.write("    <name>Merged Track</name>")
-            writer.newLine()
-            writer.write("    <trkseg>")
-            writer.newLine()
 
-            for (pt in allPoints) {
-                writer.write("""      <trkpt lat="${pt.lat}" lon="${pt.lon}">""")
+            for ((index, points) in fileTracks.withIndex()) {
+                writer.write("  <trk>")
                 writer.newLine()
-                if (pt.ele.isNotEmpty()) {
-                    writer.write("        <ele>${pt.ele}</ele>")
+                writer.write("    <name>Track ${index + 1}</name>")
+                writer.newLine()
+                writer.write("    <trkseg>")
+                writer.newLine()
+
+                for (pt in points) {
+                    writer.write("""      <trkpt lat="${pt.lat}" lon="${pt.lon}">""")
+                    writer.newLine()
+                    if (pt.ele.isNotEmpty()) {
+                        writer.write("        <ele>${pt.ele}</ele>")
+                        writer.newLine()
+                    }
+                    if (pt.time.isNotEmpty()) {
+                        writer.write("        <time>${pt.time}</time>")
+                        writer.newLine()
+                    }
+                    if (pt.speed.isNotEmpty()) {
+                        writer.write("        <speed>${pt.speed}</speed>")
+                        writer.newLine()
+                    }
+                    writer.write("      </trkpt>")
                     writer.newLine()
                 }
-                if (pt.time.isNotEmpty()) {
-                    writer.write("        <time>${pt.time}</time>")
-                    writer.newLine()
-                }
-                if (pt.speed.isNotEmpty()) {
-                    writer.write("        <speed>${pt.speed}</speed>")
-                    writer.newLine()
-                }
-                writer.write("      </trkpt>")
+
+                writer.write("    </trkseg>")
+                writer.newLine()
+                writer.write("  </trk>")
                 writer.newLine()
             }
 
-            writer.write("    </trkseg>")
-            writer.newLine()
-            writer.write("  </trk>")
-            writer.newLine()
             writer.write("</gpx>")
             writer.newLine()
         }
