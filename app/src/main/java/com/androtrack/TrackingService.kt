@@ -267,7 +267,7 @@ class TrackingService : Service() {
         resetStopTimer()
         handler.removeCallbacks(statsUpdater)
         handler.post(statsUpdater)
-        sendBroadcast(Intent(ACTION_TRACKING_STARTED))
+        sendBroadcast(Intent(ACTION_TRACKING_STARTED).setPackage(packageName))
         updateNotification()
     }
 
@@ -279,7 +279,7 @@ class TrackingService : Service() {
         stopLocationUpdates()
         writeGpxFile()
         releaseWakeLock()
-        sendBroadcast(Intent(ACTION_TRACKING_STOPPED))
+        sendBroadcast(Intent(ACTION_TRACKING_STOPPED).setPackage(packageName))
         updateNotification()
     }
 
@@ -364,7 +364,7 @@ class TrackingService : Service() {
             putExtra(EXTRA_CURRENT_UPDATE_RATE, currentUpdateRateHz)
             putExtra(EXTRA_AVG_UPDATE_RATE, avgUpdateRate)
         }
-        sendBroadcast(intent)
+        sendBroadcast(intent.setPackage(packageName))
     }
 
     private fun calculateTrackDistance(): Double {
