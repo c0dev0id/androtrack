@@ -5,7 +5,7 @@ REPO="c0dev0id/androTrack"
 WORKFLOW="build.yml"
 ARTIFACT_NAME="app-debug"
 APK_FILE="app-debug.apk"
-PACKAGE_ID="com.androtrack"
+PACKAGE_ID="de.codevoid.androtrack"
 WORK_DIR=$(mktemp -d)
 
 cleanup() {
