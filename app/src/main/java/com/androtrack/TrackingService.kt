@@ -26,6 +26,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.sqrt
+import kotlin.math.sin
+import kotlin.math.cos
+import kotlin.math.atan2
+import kotlin.math.pow
 
 class TrackingService : Service() {
 
@@ -34,6 +38,17 @@ class TrackingService : Service() {
         const val ACTION_STOP = "com.androtrack.STOP"
         const val ACTION_TRACKING_STARTED = "com.androtrack.TRACKING_STARTED"
         const val ACTION_TRACKING_STOPPED = "com.androtrack.TRACKING_STOPPED"
+        const val ACTION_STATS_UPDATE = "com.androtrack.STATS_UPDATE"
+
+        const val EXTRA_DISTANCE_M = "distance_m"
+        const val EXTRA_DURATION_MS = "duration_ms"
+        const val EXTRA_IS_RECORDING = "is_recording"
+        const val EXTRA_FILE_NAME = "file_name"
+        const val EXTRA_PAUSE_TIMEOUT_MS = "pause_timeout_ms"
+        const val EXTRA_CURRENT_ACCURACY = "current_accuracy"
+        const val EXTRA_AVG_ACCURACY = "avg_accuracy"
+        const val EXTRA_CURRENT_UPDATE_RATE = "current_update_rate"
+        const val EXTRA_AVG_UPDATE_RATE = "avg_update_rate"
 
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "TRACK_CHANNEL"
@@ -41,6 +56,7 @@ class TrackingService : Service() {
         private const val MOTION_THRESHOLD = 0.8f
         private const val LOCATION_INTERVAL_MS = 200L  // 5 Hz; hardware delivers at fastest available rate if slower
         private const val LOCATION_MIN_DISTANCE = 0f
+        private const val STATS_UPDATE_INTERVAL_MS = 1000L
     }
 
     data class GpxTrackPoint(
@@ -62,6 +78,24 @@ class TrackingService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private val stopTimer = Runnable { stopRecording() }
 
+    // Stats tracking
+    private var recordingStartMs = 0L
+    private var lastStopTimerResetMs = 0L
+    private var currentAccuracy = 0f
+    private var accuracySum = 0.0
+    private var accuracyCount = 0L
+    private var lastLocationTimeNs = 0L
+    private var currentUpdateRateHz = 0f
+    private var updateRateSum = 0.0
+    private var updateRateCount = 0L
+
+    private val statsUpdater = object : Runnable {
+        override fun run() {
+            broadcastStats()
+            handler.postDelayed(this, STATS_UPDATE_INTERVAL_MS)
+        }
+    }
+
     private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
         timeZone = java.util.TimeZone.getTimeZone("UTC")
     }
@@ -69,6 +103,25 @@ class TrackingService : Service() {
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
+            // Track GPS accuracy
+            if (location.hasAccuracy()) {
+                currentAccuracy = location.accuracy
+                accuracySum += currentAccuracy
+                accuracyCount++
+            }
+
+            // Track update rate
+            val nowNs = System.nanoTime()
+            if (lastLocationTimeNs > 0) {
+                val deltaSec = (nowNs - lastLocationTimeNs) / 1_000_000_000.0
+                if (deltaSec > 0) {
+                    currentUpdateRateHz = (1.0 / deltaSec).toFloat()
+                    updateRateSum += currentUpdateRateHz
+                    updateRateCount++
+                }
+            }
+            lastLocationTimeNs = nowNs
+
             if (isRecording) {
                 val point = GpxTrackPoint(
                     lat = location.latitude,
@@ -134,6 +187,7 @@ class TrackingService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacks(stopTimer)
+        handler.removeCallbacks(statsUpdater)
         if (isRecording) stopRecording()
         unregisterMotionSensor()
         stopLocationUpdates()
@@ -190,12 +244,23 @@ class TrackingService : Service() {
     private fun startRecording() {
         isRecording = true
         trackPoints.clear()
+        recordingStartMs = System.currentTimeMillis()
+        // Reset GPS stats
+        currentAccuracy = 0f
+        accuracySum = 0.0
+        accuracyCount = 0
+        lastLocationTimeNs = 0L
+        currentUpdateRateHz = 0f
+        updateRateSum = 0.0
+        updateRateCount = 0
         val timestamp = fileNameFormat.format(Date())
         val dir = getExternalFilesDir(null) ?: filesDir
         currentGpxFile = File(dir, "track_$timestamp.gpx")
         acquireWakeLock()
         startLocationUpdates()
         resetStopTimer()
+        handler.removeCallbacks(statsUpdater)
+        handler.post(statsUpdater)
         sendBroadcast(Intent(ACTION_TRACKING_STARTED))
         updateNotification()
     }
@@ -203,6 +268,7 @@ class TrackingService : Service() {
     private fun stopRecording() {
         isRecording = false
         handler.removeCallbacks(stopTimer)
+        handler.removeCallbacks(statsUpdater)
         stopLocationUpdates()
         writeGpxFile()
         releaseWakeLock()
@@ -231,6 +297,7 @@ class TrackingService : Service() {
     private fun resetStopTimer() {
         handler.removeCallbacks(stopTimer)
         handler.postDelayed(stopTimer, NO_MOVEMENT_TIMEOUT_MS)
+        lastStopTimerResetMs = System.currentTimeMillis()
     }
 
     private fun writeGpxFile() {
@@ -263,6 +330,54 @@ class TrackingService : Service() {
         } catch (e: Exception) {
             // Failed to write GPX
         }
+    }
+
+    private fun broadcastStats() {
+        val now = System.currentTimeMillis()
+        val durationMs = if (recordingStartMs > 0) now - recordingStartMs else 0L
+        val distanceM = calculateTrackDistance()
+        val fileName = currentGpxFile?.name ?: ""
+        val pauseTimeoutMs = if (lastStopTimerResetMs > 0) {
+            val elapsed = now - lastStopTimerResetMs
+            val remaining = NO_MOVEMENT_TIMEOUT_MS - elapsed
+            if (remaining > 0) remaining else 0L
+        } else 0L
+
+        val avgAccuracy = if (accuracyCount > 0) (accuracySum / accuracyCount).toFloat() else 0f
+        val avgUpdateRate = if (updateRateCount > 0) (updateRateSum / updateRateCount).toFloat() else 0f
+
+        val intent = Intent(ACTION_STATS_UPDATE).apply {
+            putExtra(EXTRA_DISTANCE_M, distanceM)
+            putExtra(EXTRA_DURATION_MS, durationMs)
+            putExtra(EXTRA_IS_RECORDING, isRecording)
+            putExtra(EXTRA_FILE_NAME, fileName)
+            putExtra(EXTRA_PAUSE_TIMEOUT_MS, pauseTimeoutMs)
+            putExtra(EXTRA_CURRENT_ACCURACY, currentAccuracy)
+            putExtra(EXTRA_AVG_ACCURACY, avgAccuracy)
+            putExtra(EXTRA_CURRENT_UPDATE_RATE, currentUpdateRateHz)
+            putExtra(EXTRA_AVG_UPDATE_RATE, avgUpdateRate)
+        }
+        sendBroadcast(intent)
+    }
+
+    private fun calculateTrackDistance(): Double {
+        if (trackPoints.size < 2) return 0.0
+        var total = 0.0
+        for (i in 1 until trackPoints.size) {
+            val p1 = trackPoints[i - 1]
+            val p2 = trackPoints[i]
+            total += haversine(p1.lat, p1.lon, p2.lat, p2.lon)
+        }
+        return total * 1000.0 // convert km to meters
+    }
+
+    private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val r = 6371.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a = sin(dLat / 2).pow(2) +
+                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).pow(2)
+        return r * 2 * atan2(sqrt(a), sqrt(1 - a))
     }
 
     private fun updateNotification() {
