@@ -39,7 +39,7 @@ class TrackingService : Service() {
         private const val CHANNEL_ID = "TRACK_CHANNEL"
         private const val NO_MOVEMENT_TIMEOUT_MS = 20 * 60 * 1000L
         private const val MOTION_THRESHOLD = 0.8f
-        private const val LOCATION_INTERVAL_MS = 1000L
+        private const val LOCATION_INTERVAL_MS = 200L  // 5 Hz; hardware delivers at fastest available rate if slower
         private const val LOCATION_MIN_DISTANCE = 0f
     }
 
