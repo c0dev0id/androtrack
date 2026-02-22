@@ -2,6 +2,7 @@ package com.androtrack
 
 import android.Manifest
 import android.content.BroadcastReceiver
+import android.net.Uri
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -487,6 +488,14 @@ class RideListActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
+            R.id.action_coffee -> {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://buymeacoffee.com/codevoid")))
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Unable to open link", Toast.LENGTH_SHORT).show()
+                }
+                true
+            }
             R.id.action_refresh -> {
                 loadRides()
                 true
