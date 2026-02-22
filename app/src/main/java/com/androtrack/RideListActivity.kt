@@ -332,7 +332,7 @@ class RideListActivity : AppCompatActivity() {
             }
             startActivity(Intent.createChooser(shareIntent, getString(R.string.share)))
         } catch (e: Exception) {
-            Toast.makeText(this, "Share failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.share_failed), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -381,18 +381,18 @@ class RideListActivity : AppCompatActivity() {
     private fun deleteSelected() {
         val selected = adapter.getSelectedItems()
         if (selected.isEmpty()) {
-            Toast.makeText(this, "No rides selected", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.no_rides_selected), Toast.LENGTH_SHORT).show()
             return
         }
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.delete_confirm_title))
-            .setMessage("Delete ${selected.size} track(s)?")
+            .setMessage(getString(R.string.delete_tracks_message, selected.size))
             .setPositiveButton(getString(R.string.delete)) { _, _ ->
                 var deleted = 0
                 for (ride in selected) {
                     if (ride.file.delete()) deleted++
                 }
-                Toast.makeText(this, "$deleted track(s) deleted", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.tracks_deleted, deleted), Toast.LENGTH_SHORT).show()
                 actionMode?.finish()
                 loadRides()
             }
@@ -403,7 +403,7 @@ class RideListActivity : AppCompatActivity() {
     private fun downloadSelectedAsZip() {
         val selected = adapter.getSelectedItems()
         if (selected.isEmpty()) {
-            Toast.makeText(this, "No rides selected", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.no_rides_selected), Toast.LENGTH_SHORT).show()
             return
         }
 
