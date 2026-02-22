@@ -160,7 +160,11 @@ class RideListActivity : AppCompatActivity() {
         } else {
             registerReceiver(trackingReceiver, filter)
         }
+        isTracking = TrackingService.isRunning
         updateFab()
+        if (isTracking) {
+            binding.statsCard.visibility = View.VISIBLE
+        }
     }
 
     override fun onPause() {
@@ -408,24 +412,32 @@ class RideListActivity : AppCompatActivity() {
         }
 
         try {
-            val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
-            val zipName = "androtrack_$timestamp.zip"
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             downloadsDir.mkdirs()
-            val zipFile = File(downloadsDir, zipName)
 
-            ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
-                for (ride in selected) {
-                    zos.putNextEntry(ZipEntry(ride.file.name))
-                    FileInputStream(ride.file).use { fis -> fis.copyTo(zos) }
-                    zos.closeEntry()
+            if (selected.size == 1) {
+                val srcFile = selected.first().file
+                val destFile = File(downloadsDir, srcFile.name)
+                srcFile.copyTo(destFile, overwrite = true)
+                Toast.makeText(this, "Saved to Downloads/${srcFile.name}", Toast.LENGTH_LONG).show()
+            } else {
+                val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
+                val zipName = "androtrack_$timestamp.zip"
+                val zipFile = File(downloadsDir, zipName)
+
+                ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
+                    for (ride in selected) {
+                        zos.putNextEntry(ZipEntry(ride.file.name))
+                        FileInputStream(ride.file).use { fis -> fis.copyTo(zos) }
+                        zos.closeEntry()
+                    }
                 }
-            }
 
-            Toast.makeText(this, "Saved to Downloads/$zipName", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Saved to Downloads/$zipName", Toast.LENGTH_LONG).show()
+            }
             actionMode?.finish()
         } catch (e: Exception) {
-            Toast.makeText(this, "Failed to create ZIP: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Failed to download: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
