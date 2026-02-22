@@ -9,4 +9,23 @@
     <string name="select_all">Select all</string>
     <string name="tracking_started">Tracking started</string>
     <string name="tracking_stopped">Tracking stopped</string>
+    <string name="status_recording">● Recording</string>
+    <string name="status_paused">● Paused – waiting for movement</string>
+    <string name="gps_signal">GPS Signal</string>
+    <string name="select">Select</string>
+    <string name="share">Share</string>
+    <string name="delete">Delete</string>
+    <string name="rename">Rename</string>
+    <string name="rename_track">Rename track</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete_confirm_title">Delete track?</string>
+    <string name="delete_confirm_message">Are you sure you want to delete \"%1$s\"?</string>
+    <string name="track_deleted">Track deleted</string>
+    <string name="track_renamed">Track renamed</string>
+    <string name="rename_failed">Rename failed</string>
+    <string name="delete_failed">Delete failed</string>
+    <string name="no_rides_selected">No rides selected</string>
+    <string name="delete_tracks_message">Delete %1$d track(s)?</string>
+    <string name="tracks_deleted">%1$d track(s) deleted</string>
+    <string name="share_failed">Unable to share track</string>
 </resources>

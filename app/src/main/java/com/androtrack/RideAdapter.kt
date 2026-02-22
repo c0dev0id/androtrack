@@ -9,7 +9,7 @@ import androidx.recyclerview.widget.RecyclerView
 class RideAdapter(
     private val items: MutableList<RideItem>,
     private val onItemClick: (Int) -> Unit,
-    private val onItemLongClick: (Int) -> Unit
+    private val onItemLongClick: (Int, View) -> Unit
 ) : RecyclerView.Adapter<RideAdapter.RideViewHolder>() {
 
     private val selectedPositions = mutableSetOf<Int>()
@@ -48,12 +48,15 @@ class RideAdapter(
 
         holder.itemView.setOnClickListener { onItemClick(position) }
         holder.itemView.setOnLongClickListener {
-            onItemLongClick(position)
+            onItemLongClick(position, it)
             true
         }
     }
 
     override fun getItemCount() = items.size
+
+    fun getItemAt(position: Int): RideItem? =
+        if (position in items.indices) items[position] else null
 
     fun toggleSelection(position: Int) {
         if (selectedPositions.contains(position)) {

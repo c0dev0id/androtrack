@@ -13,10 +13,14 @@ import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.EditText
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.androtrack.databinding.ActivityRideListBinding
 import java.io.File
@@ -41,11 +45,16 @@ class RideListActivity : AppCompatActivity() {
                 TrackingService.ACTION_TRACKING_STARTED -> {
                     isTracking = true
                     updateFab()
+                    binding.statsCard.visibility = View.VISIBLE
                 }
                 TrackingService.ACTION_TRACKING_STOPPED -> {
                     isTracking = false
                     updateFab()
+                    binding.statsCard.visibility = View.GONE
                     loadRides()
+                }
+                TrackingService.ACTION_STATS_UPDATE -> {
+                    updateStatsPanel(intent)
                 }
             }
         }
@@ -72,6 +81,10 @@ class RideListActivity : AppCompatActivity() {
                 R.id.action_select_all -> {
                     adapter.selectAll()
                     mode.title = "${adapter.getSelectedCount()} selected"
+                    true
+                }
+                R.id.action_delete -> {
+                    deleteSelected()
                     true
                 }
                 else -> false
@@ -115,14 +128,14 @@ class RideListActivity : AppCompatActivity() {
                     }
                 }
             },
-            onItemLongClick = { position ->
-                if (!adapter.selectionMode) {
-                    adapter.selectionMode = true
-                    actionMode = startActionMode(actionModeCallback)
+            onItemLongClick = { position, anchorView ->
+                if (adapter.selectionMode) {
+                    adapter.toggleSelection(position)
+                    val count = adapter.getSelectedCount()
+                    actionMode?.title = "$count selected"
+                } else {
+                    showItemContextMenu(position, anchorView)
                 }
-                adapter.toggleSelection(position)
-                val count = adapter.getSelectedCount()
-                actionMode?.title = "$count selected"
             }
         )
 
@@ -140,6 +153,7 @@ class RideListActivity : AppCompatActivity() {
         val filter = IntentFilter().apply {
             addAction(TrackingService.ACTION_TRACKING_STARTED)
             addAction(TrackingService.ACTION_TRACKING_STOPPED)
+            addAction(TrackingService.ACTION_STATS_UPDATE)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(trackingReceiver, filter, RECEIVER_NOT_EXPORTED)
@@ -200,6 +214,7 @@ class RideListActivity : AppCompatActivity() {
         ContextCompat.startForegroundService(this, intent)
         isTracking = true
         updateFab()
+        binding.statsCard.visibility = View.VISIBLE
     }
 
     private fun stopTrackingService() {
@@ -209,6 +224,7 @@ class RideListActivity : AppCompatActivity() {
         startService(intent)
         isTracking = false
         updateFab()
+        binding.statsCard.visibility = View.GONE
     }
 
     private fun updateFab() {
@@ -217,6 +233,41 @@ class RideListActivity : AppCompatActivity() {
             else android.R.drawable.ic_menu_mylocation
         )
         binding.fab.contentDescription = if (isTracking) "Stop tracking" else "Start tracking"
+    }
+
+    private fun updateStatsPanel(intent: Intent) {
+        val distanceM = intent.getDoubleExtra(TrackingService.EXTRA_DISTANCE_M, 0.0)
+        val durationMs = intent.getLongExtra(TrackingService.EXTRA_DURATION_MS, 0L)
+        val recording = intent.getBooleanExtra(TrackingService.EXTRA_IS_RECORDING, false)
+        val fileName = intent.getStringExtra(TrackingService.EXTRA_FILE_NAME) ?: ""
+        val pauseTimeoutMs = intent.getLongExtra(TrackingService.EXTRA_PAUSE_TIMEOUT_MS, 0L)
+        val curAccuracy = intent.getFloatExtra(TrackingService.EXTRA_CURRENT_ACCURACY, 0f)
+        val avgAccuracy = intent.getFloatExtra(TrackingService.EXTRA_AVG_ACCURACY, 0f)
+        val curRate = intent.getFloatExtra(TrackingService.EXTRA_CURRENT_UPDATE_RATE, 0f)
+        val avgRate = intent.getFloatExtra(TrackingService.EXTRA_AVG_UPDATE_RATE, 0f)
+
+        binding.statsCard.visibility = View.VISIBLE
+
+        binding.tvStatsStatus.text = if (recording)
+            getString(R.string.status_recording)
+        else
+            getString(R.string.status_paused)
+
+        binding.tvStatsFileName.text = "File: $fileName"
+        binding.tvStatsDistance.text = String.format("Distance: %.2f km", distanceM / 1000.0)
+        binding.tvStatsDuration.text = "Time: ${formatDuration(durationMs)}"
+
+        if (!recording && pauseTimeoutMs > 0) {
+            binding.tvStatsPauseTimeout.visibility = View.VISIBLE
+            binding.tvStatsPauseTimeout.text = "New file in: ${formatDuration(pauseTimeoutMs)}"
+        } else {
+            binding.tvStatsPauseTimeout.visibility = View.GONE
+        }
+
+        binding.tvStatsAccuracy.text = String.format("Accuracy: %.1fm", curAccuracy)
+        binding.tvStatsAvgAccuracy.text = String.format("Avg: %.1fm", avgAccuracy)
+        binding.tvStatsUpdateRate.text = String.format("Rate: %.1f Hz", curRate)
+        binding.tvStatsAvgUpdateRate.text = String.format("Avg: %.1f Hz", avgRate)
     }
 
     private fun loadRides() {
@@ -233,10 +284,126 @@ class RideListActivity : AppCompatActivity() {
         binding.recyclerView.visibility = if (rides.isEmpty()) View.GONE else View.VISIBLE
     }
 
+    private fun showItemContextMenu(position: Int, anchor: View) {
+        val item = adapter.getItemAt(position) ?: return
+        val popup = PopupMenu(this, anchor)
+        popup.menu.add(0, 1, 0, getString(R.string.select))
+        popup.menu.add(0, 2, 1, getString(R.string.share))
+        popup.menu.add(0, 3, 2, getString(R.string.rename))
+        popup.menu.add(0, 4, 3, getString(R.string.delete))
+        popup.setOnMenuItemClickListener { menuItem ->
+            when (menuItem.itemId) {
+                1 -> {
+                    adapter.selectionMode = true
+                    actionMode = startActionMode(actionModeCallback)
+                    adapter.toggleSelection(position)
+                    actionMode?.title = "${adapter.getSelectedCount()} selected"
+                    true
+                }
+                2 -> {
+                    shareTrack(item)
+                    true
+                }
+                3 -> {
+                    showRenameDialog(item)
+                    true
+                }
+                4 -> {
+                    showDeleteDialog(item)
+                    true
+                }
+                else -> false
+            }
+        }
+        popup.show()
+    }
+
+    private fun shareTrack(item: RideItem) {
+        try {
+            val uri = FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                item.file
+            )
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/gpx+xml"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(shareIntent, getString(R.string.share)))
+        } catch (e: Exception) {
+            Toast.makeText(this, getString(R.string.share_failed), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showDeleteDialog(item: RideItem) {
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.delete_confirm_title))
+            .setMessage(getString(R.string.delete_confirm_message, item.file.name))
+            .setPositiveButton(getString(R.string.delete)) { _, _ ->
+                if (item.file.delete()) {
+                    Toast.makeText(this, getString(R.string.track_deleted), Toast.LENGTH_SHORT).show()
+                    loadRides()
+                } else {
+                    Toast.makeText(this, getString(R.string.delete_failed), Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun showRenameDialog(item: RideItem) {
+        val currentName = item.file.nameWithoutExtension
+        val editText = EditText(this).apply {
+            setText(currentName)
+            selectAll()
+            setPadding(48, 32, 48, 16)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.rename_track))
+            .setView(editText)
+            .setPositiveButton(getString(R.string.rename)) { _, _ ->
+                val newName = editText.text.toString().trim()
+                if (newName.isNotEmpty() && newName != currentName) {
+                    val newFile = File(item.file.parent, "$newName.gpx")
+                    if (item.file.renameTo(newFile)) {
+                        Toast.makeText(this, getString(R.string.track_renamed), Toast.LENGTH_SHORT).show()
+                        loadRides()
+                    } else {
+                        Toast.makeText(this, getString(R.string.rename_failed), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun deleteSelected() {
+        val selected = adapter.getSelectedItems()
+        if (selected.isEmpty()) {
+            Toast.makeText(this, getString(R.string.no_rides_selected), Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.delete_confirm_title))
+            .setMessage(getString(R.string.delete_tracks_message, selected.size))
+            .setPositiveButton(getString(R.string.delete)) { _, _ ->
+                var deleted = 0
+                for (ride in selected) {
+                    if (ride.file.delete()) deleted++
+                }
+                Toast.makeText(this, getString(R.string.tracks_deleted, deleted), Toast.LENGTH_SHORT).show()
+                actionMode?.finish()
+                loadRides()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
     private fun downloadSelectedAsZip() {
         val selected = adapter.getSelectedItems()
         if (selected.isEmpty()) {
-            Toast.makeText(this, "No rides selected", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.no_rides_selected), Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -273,6 +440,10 @@ class RideListActivity : AppCompatActivity() {
             val outputDir = getExternalFilesDir(null) ?: filesDir
             val merged = GpxMerger.merge(selected.map { it.file }, outputDir)
             if (merged != null) {
+                // Delete source track files after successful merge
+                for (ride in selected) {
+                    ride.file.delete()
+                }
                 Toast.makeText(this, "Merged: ${merged.name}", Toast.LENGTH_LONG).show()
                 actionMode?.finish()
                 loadRides()
@@ -281,6 +452,19 @@ class RideListActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             Toast.makeText(this, "Merge failed: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun formatDuration(ms: Long): String {
+        if (ms <= 0) return "0m"
+        val totalSeconds = ms / 1000
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds % 60
+        return when {
+            hours > 0 -> "${hours}h ${minutes}m"
+            minutes > 0 -> "${minutes}m ${seconds}s"
+            else -> "${seconds}s"
         }
     }
 
