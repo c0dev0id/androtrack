@@ -38,7 +38,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:text="@string/no_rides"
-        android:textAppearance="?attr/textAppearanceMedium"
+        android:textAppearance="@style/TextAppearance.AppCompat.Medium"
         android:textColor="@color/text_secondary"
         android:visibility="gone" />
 
