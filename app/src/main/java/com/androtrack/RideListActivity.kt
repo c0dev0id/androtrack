@@ -162,6 +162,12 @@ class RideListActivity : AppCompatActivity() {
             registerReceiver(trackingReceiver, filter)
         }
         isTracking = TrackingService.isRunning
+        if (isTracking &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) {
+            stopTrackingService()
+        }
         updateFab()
         if (isTracking) {
             binding.statsCard.visibility = View.VISIBLE
@@ -213,6 +219,13 @@ class RideListActivity : AppCompatActivity() {
     }
 
     private fun startTrackingService() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Toast.makeText(this, getString(R.string.location_permission_required), Toast.LENGTH_LONG).show()
+            checkAndRequestPermissions()
+            return
+        }
         val intent = Intent(this, TrackingService::class.java).apply {
             action = TrackingService.ACTION_START
         }
