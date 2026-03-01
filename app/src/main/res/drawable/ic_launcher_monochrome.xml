@@ -5,14 +5,23 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Pin silhouette -->
+    <!-- Route trail -->
+    <path
+        android:pathData="M22,80 C32,68 40,58 50,52 C58,47 66,48 72,44 C78,40 84,34 90,26"
+        android:strokeColor="#000000"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.3"
+        android:fillColor="#00000000" />
+
+    <!-- Pin body -->
     <path
         android:fillColor="#000000"
-        android:pathData="M54,75 C54,75 34,58 34,44 C34,33 43,26 54,26 C65,26 74,33 74,44 C74,58 54,75 54,75 Z" />
+        android:pathData="M54,75 C54,75 34,57.5 34,44 C34,33.5 43,26 54,26 C65,26 74,33.5 74,44 C74,57.5 54,75 54,75 Z" />
 
-    <!-- Inner circle cutout (transparent) -->
+    <!-- Inner circle cutout -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,35 C48,35 43,40 43,46 C43,52 48,57 54,57 C60,57 65,52 65,46 C65,40 60,35 54,35 Z" />
+        android:pathData="M54,36 C48.5,36 44,40.5 44,46 C44,51.5 48.5,56 54,56 C59.5,56 64,51.5 64,46 C64,40.5 59.5,36 54,36 Z" />
 
 </vector>

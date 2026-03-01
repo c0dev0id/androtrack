@@ -1,39 +1,82 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Route/trail curve -->
+    <!-- Dashed route trail (behind pin) -->
     <path
-        android:pathData="M10,82 C30,66 42,54 54,54 C66,54 78,42 98,26"
+        android:pathData="M22,80 C32,68 40,58 50,52 C58,47 66,48 72,44 C78,40 84,34 90,26"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="3"
+        android:strokeWidth="2.2"
         android:strokeLineCap="round"
-        android:strokeAlpha="0.5"
+        android:strokeAlpha="0.25"
         android:fillColor="#00000000" />
 
-    <!-- Pin shadow -->
+    <!-- Secondary subtle trail -->
+    <path
+        android:pathData="M18,72 C28,64 36,56 44,52 C50,49 56,50 62,46 C68,42 76,34 86,22"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.12"
+        android:fillColor="#00000000" />
+
+    <!-- Pin drop shadow -->
     <path
         android:fillColor="#000000"
-        android:fillAlpha="0.15"
-        android:pathData="M56,29 C43.5,29 34,38.5 34,47 C34,60.5 56,78 56,78 C56,78 78,60.5 78,47 C78,38.5 68.5,29 56,29 Z" />
+        android:fillAlpha="0.18"
+        android:pathData="M56,30 C44.5,30 36,38.5 36,47.5 C36,60 56,77 56,77 C56,77 76,60 76,47.5 C76,38.5 67.5,30 56,30 Z" />
 
-    <!-- Pin body -->
+    <!-- Pin body with gradient -->
+    <path android:pathData="M54,75 C54,75 34,57.5 34,44 C34,33.5 43,26 54,26 C65,26 74,33.5 74,44 C74,57.5 54,75 54,75 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54"
+                android:startY="26"
+                android:endX="54"
+                android:endY="75">
+                <item android:offset="0" android:color="#FFFFFFFF" />
+                <item android:offset="1" android:color="#FFF0F0F0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Pin inner circle - orange accent with gradient -->
+    <path android:pathData="M54,36 C48.5,36 44,40.5 44,46 C44,51.5 48.5,56 54,56 C59.5,56 64,51.5 64,46 C64,40.5 59.5,36 54,36 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="52"
+                android:centerY="44"
+                android:gradientRadius="12">
+                <item android:offset="0" android:color="#FFFF8F00" />
+                <item android:offset="1" android:color="#FFE65100" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Inner circle ring highlight -->
+    <path
+        android:pathData="M54,37.5 C49.3,37.5 45.5,41.3 45.5,46 C45.5,50.7 49.3,54.5 54,54.5 C58.7,54.5 62.5,50.7 62.5,46 C62.5,41.3 58.7,37.5 54,37.5 Z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="0.6"
+        android:strokeAlpha="0.3"
+        android:fillColor="#00000000" />
+
+    <!-- Specular highlight on pin -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,75 C54,75 34,58 34,44 C34,33 43,26 54,26 C65,26 74,33 74,44 C74,58 54,75 54,75 Z" />
+        android:fillAlpha="0.5"
+        android:pathData="M46,34 C43,36 41,39 40,42 C39,44 40,43 42,40 C44,37 47,34 50,33 C52,32.5 48,33 46,34 Z" />
 
-    <!-- Pin inner circle (orange accent) -->
-    <path
-        android:fillColor="#FF6D00"
-        android:pathData="M54,35 C48,35 43,40 43,46 C43,52 48,57 54,57 C60,57 65,52 65,46 C65,40 60,35 54,35 Z" />
-
-    <!-- Highlight dot (polish/reflection) -->
+    <!-- Small dot highlight in orange circle -->
     <path
         android:fillColor="#FFFFFF"
-        android:fillAlpha="0.4"
-        android:pathData="M50,40 C48,40 46.5,41.5 46.5,43.5 C46.5,45.5 48,47 50,47 C52,47 53.5,45.5 53.5,43.5 C53.5,41.5 52,40 50,40 Z" />
+        android:fillAlpha="0.55"
+        android:pathData="M50.5,41 C49,41 48,42 48,43.5 C48,45 49,46 50.5,46 C52,46 53,45 53,43.5 C53,42 52,41 50.5,41 Z" />
 
 </vector>

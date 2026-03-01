@@ -1,2 +1,2 @@
 # Add project specific ProGuard rules here.
--keep class com.androtrack.** { *; }
+-keep class de.codevoid.androtrack.** { *; }
