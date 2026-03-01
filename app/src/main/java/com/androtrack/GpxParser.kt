@@ -13,60 +13,17 @@ object GpxParser {
     private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
     private val isoFormatTz = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
 
-    data class TrackPoint(val lat: Double, val lon: Double, val timeMs: Long, val speed: Float)
+    data class TrackPoint(
+        val lat: Double,
+        val lon: Double,
+        val timeMs: Long,
+        val speed: Float,
+        val ele: Double = 0.0
+    )
 
     fun parse(file: File): RideItem? {
         return try {
-            val points = mutableListOf<TrackPoint>()
-            FileInputStream(file).use { fis ->
-                val parser = Xml.newPullParser()
-                parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
-                parser.setInput(fis, null)
-                var lat = 0.0
-                var lon = 0.0
-                var timeMs = 0L
-                var speed = 0f
-                var inTrkpt = false
-                var currentTag = ""
-
-                var eventType = parser.eventType
-                while (eventType != XmlPullParser.END_DOCUMENT) {
-                    when (eventType) {
-                        XmlPullParser.START_TAG -> {
-                            currentTag = parser.name
-                            if (currentTag == "trkpt") {
-                                inTrkpt = true
-                                lat = parser.getAttributeValue(null, "lat")?.toDoubleOrNull() ?: 0.0
-                                lon = parser.getAttributeValue(null, "lon")?.toDoubleOrNull() ?: 0.0
-                                timeMs = 0L
-                                speed = 0f
-                            }
-                        }
-                        XmlPullParser.TEXT -> {
-                            if (inTrkpt) {
-                                val text = parser.text.trim()
-                                when (currentTag) {
-                                    "time" -> timeMs = parseTime(text)
-                                    "speed" -> speed = text.toFloatOrNull() ?: 0f
-                                }
-                            }
-                        }
-                        XmlPullParser.END_TAG -> {
-                            if (parser.name == "trkpt" && inTrkpt) {
-                                inTrkpt = false
-                                if (lat != 0.0 || lon != 0.0) {
-                                    points.add(TrackPoint(lat, lon, timeMs, speed))
-                                }
-                            }
-                            if (parser.name == currentTag) {
-                                currentTag = ""
-                            }
-                        }
-                    }
-                    eventType = parser.next()
-                }
-            }
-
+            val points = parsePointsInternal(file)
             if (points.isEmpty()) return null
 
             val startMs = points.first().timeMs
@@ -104,6 +61,71 @@ object GpxParser {
         }
     }
 
+    fun parseTrackPoints(file: File): List<TrackPoint>? {
+        return try {
+            val points = parsePointsInternal(file)
+            if (points.isEmpty()) null else points
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun parsePointsInternal(file: File): List<TrackPoint> {
+        val points = mutableListOf<TrackPoint>()
+        FileInputStream(file).use { fis ->
+            val parser = Xml.newPullParser()
+            parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
+            parser.setInput(fis, null)
+            var lat = 0.0
+            var lon = 0.0
+            var timeMs = 0L
+            var speed = 0f
+            var ele = 0.0
+            var inTrkpt = false
+            var currentTag = ""
+
+            var eventType = parser.eventType
+            while (eventType != XmlPullParser.END_DOCUMENT) {
+                when (eventType) {
+                    XmlPullParser.START_TAG -> {
+                        currentTag = parser.name
+                        if (currentTag == "trkpt") {
+                            inTrkpt = true
+                            lat = parser.getAttributeValue(null, "lat")?.toDoubleOrNull() ?: 0.0
+                            lon = parser.getAttributeValue(null, "lon")?.toDoubleOrNull() ?: 0.0
+                            timeMs = 0L
+                            speed = 0f
+                            ele = 0.0
+                        }
+                    }
+                    XmlPullParser.TEXT -> {
+                        if (inTrkpt) {
+                            val text = parser.text.trim()
+                            when (currentTag) {
+                                "time" -> timeMs = parseTime(text)
+                                "speed" -> speed = text.toFloatOrNull() ?: 0f
+                                "ele" -> ele = text.toDoubleOrNull() ?: 0.0
+                            }
+                        }
+                    }
+                    XmlPullParser.END_TAG -> {
+                        if (parser.name == "trkpt" && inTrkpt) {
+                            inTrkpt = false
+                            if (lat != 0.0 || lon != 0.0) {
+                                points.add(TrackPoint(lat, lon, timeMs, speed, ele))
+                            }
+                        }
+                        if (parser.name == currentTag) {
+                            currentTag = ""
+                        }
+                    }
+                }
+                eventType = parser.next()
+            }
+        }
+        return points
+    }
+
     private fun parseTime(text: String): Long {
         return try {
             isoFormatTz.parse(text)?.time ?: (isoFormat.parse(text)?.time ?: 0L)
@@ -120,7 +142,7 @@ object GpxParser {
         return total
     }
 
-    private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
         val r = 6371.0
         val dLat = Math.toRadians(lat2 - lat1)
         val dLon = Math.toRadians(lon2 - lon1)
