@@ -91,15 +91,35 @@
 
                 </LinearLayout>
 
+                <!-- Auto-pause countdown (recording) or paused-state info — always visible -->
                 <TextView
-                    android:id="@+id/tvStatsPauseTimeout"
+                    android:id="@+id/tvStatsAutoPause"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textAppearance="?attr/textAppearanceBody2"
+                    android:textColor="@color/colorOnPrimary"
+                    tools:text="Auto-pause in: 19m 30s (1200s timeout)" />
+
+                <!-- Time elapsed since last motion event above threshold — always visible -->
+                <TextView
+                    android:id="@+id/tvStatsLastMotion"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
                     android:textAppearance="?attr/textAppearanceBody2"
                     android:textColor="@color/colorOnPrimary"
-                    android:visibility="gone"
-                    tools:text="New file in: 19m 30s" />
+                    tools:text="Last motion: 30s ago" />
+
+                <!-- Why recording started or what triggers the next state change — always visible -->
+                <TextView
+                    android:id="@+id/tvStatsReason"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textAppearance="?attr/textAppearanceBody2"
+                    android:textColor="@color/colorOnPrimary"
+                    tools:text="Started: motion detected" />
 
                 <View
                     android:layout_width="match_parent"
