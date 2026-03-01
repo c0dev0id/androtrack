@@ -13,12 +13,18 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.atan
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 
 class TrackDetailActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_FILE_PATH = "extra_file_path"
         private const val MOVING_SPEED_THRESHOLD = 0.556f // ~2 km/h in m/s
+        private const val GRAVITY = 9.81
     }
 
     private lateinit var binding: ActivityTrackDetailBinding
@@ -26,6 +32,8 @@ class TrackDetailActivity : AppCompatActivity() {
     private var geoPoints: List<GeoPoint> = emptyList()
     private var trackOverlay: GradientTrackOverlay? = null
     private var currentMode = HistogramView.Mode.ALTITUDE
+    private var leanAngles: FloatArray = FloatArray(0)
+    private var forces: FloatArray = FloatArray(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,6 +52,8 @@ class TrackDetailActivity : AppCompatActivity() {
 
         binding.chipAltitude.setOnClickListener { switchMode(HistogramView.Mode.ALTITUDE) }
         binding.chipSpeed.setOnClickListener { switchMode(HistogramView.Mode.SPEED) }
+        binding.chipLeanAngle.setOnClickListener { switchMode(HistogramView.Mode.LEAN_ANGLE) }
+        binding.chipForce.setOnClickListener { switchMode(HistogramView.Mode.FORCE) }
 
         binding.histogramView.onPositionChanged = { index -> onHistogramTouch(index) }
         binding.histogramView.onTouchReleased = { onHistogramRelease() }
@@ -70,6 +80,8 @@ class TrackDetailActivity : AppCompatActivity() {
         }
 
         geoPoints = trackPoints.map { GeoPoint(it.lat, it.lon) }
+        leanAngles = computeLeanAngles(trackPoints)
+        forces = computeForces(trackPoints)
 
         setupMap()
         switchMode(HistogramView.Mode.ALTITUDE)
@@ -93,6 +105,8 @@ class TrackDetailActivity : AppCompatActivity() {
         currentMode = mode
         binding.chipAltitude.isChecked = mode == HistogramView.Mode.ALTITUDE
         binding.chipSpeed.isChecked = mode == HistogramView.Mode.SPEED
+        binding.chipLeanAngle.isChecked = mode == HistogramView.Mode.LEAN_ANGLE
+        binding.chipForce.isChecked = mode == HistogramView.Mode.FORCE
 
         val colors = calculateColors(mode)
         val values = calculateValues(mode)
@@ -117,6 +131,15 @@ class TrackDetailActivity : AppCompatActivity() {
             HistogramView.Mode.SPEED -> {
                 trackPoints.map { speedToColor(it.speed * 3.6f) }
             }
+            HistogramView.Mode.LEAN_ANGLE -> {
+                val maxLean = leanAngles.maxOrNull()?.coerceAtLeast(5.1f) ?: 5.1f
+                leanAngles.map { leanAngleToColor(it, maxLean) }
+            }
+            HistogramView.Mode.FORCE -> {
+                val maxAccel = forces.filter { it > 0f }.maxOrNull() ?: 0.01f
+                val maxBrake = forces.filter { it < 0f }.minOrNull() ?: -0.01f
+                forces.map { forceToColor(it, maxAccel, maxBrake) }
+            }
         }
     }
 
@@ -124,6 +147,8 @@ class TrackDetailActivity : AppCompatActivity() {
         return when (mode) {
             HistogramView.Mode.ALTITUDE -> trackPoints.map { it.ele.toFloat() }.toFloatArray()
             HistogramView.Mode.SPEED -> trackPoints.map { it.speed * 3.6f }.toFloatArray()
+            HistogramView.Mode.LEAN_ANGLE -> leanAngles
+            HistogramView.Mode.FORCE -> forces
         }
     }
 
@@ -141,12 +166,42 @@ class TrackDetailActivity : AppCompatActivity() {
         return Color.HSVToColor(floatArrayOf(hue, 0.85f, 0.85f))
     }
 
+    private fun leanAngleToColor(angle: Float, maxLean: Float): Int {
+        if (angle <= 5f) return Color.HSVToColor(floatArrayOf(120f, 0.85f, 0.85f))
+        val ratio = ((angle - 5f) / (maxLean - 5f)).coerceIn(0f, 1f)
+        val hue = 120f * (1f - ratio)
+        return Color.HSVToColor(floatArrayOf(hue, 0.85f, 0.85f))
+    }
+
+    private fun forceToColor(forceG: Float, maxAccel: Float, maxBrake: Float): Int {
+        if (forceG >= 0f) {
+            val ratio = if (maxAccel > 0f) (forceG / maxAccel).coerceIn(0f, 1f) else 0f
+            val hue = 120f * (1f - ratio)
+            return Color.HSVToColor(floatArrayOf(hue, 0.85f, 0.85f))
+        } else {
+            val ratio = if (maxBrake < 0f) (abs(forceG) / abs(maxBrake)).coerceIn(0f, 1f) else 0f
+            val hue = 120f + 120f * ratio
+            return Color.HSVToColor(floatArrayOf(hue, 0.85f, 0.85f))
+        }
+    }
+
     private fun onHistogramTouch(index: Int) {
         if (index !in trackPoints.indices) return
         val point = trackPoints[index]
 
         binding.indicatorValues.visibility = View.VISIBLE
-        binding.tvIndicatorAltitude.text = String.format("Alt: %.0f m", point.ele)
+
+        when (currentMode) {
+            HistogramView.Mode.LEAN_ANGLE -> {
+                binding.tvIndicatorAltitude.text = String.format("Lean: %.1f\u00B0", leanAngles.getOrElse(index) { 0f })
+            }
+            HistogramView.Mode.FORCE -> {
+                binding.tvIndicatorAltitude.text = String.format("Force: %.2f G", forces.getOrElse(index) { 0f })
+            }
+            else -> {
+                binding.tvIndicatorAltitude.text = String.format("Alt: %.0f m", point.ele)
+            }
+        }
         binding.tvIndicatorSpeed.text = String.format("Speed: %.1f km/h", point.speed * 3.6f)
 
         trackOverlay?.highlightIndex = index
@@ -206,6 +261,90 @@ class TrackDetailActivity : AppCompatActivity() {
             0.0
         }
         binding.tvDetailAvgSpeed.text = String.format("%.1f km/h", avgSpeedKmh)
+
+        val maxLean = leanAngles.maxOrNull() ?: 0f
+        binding.tvDetailMaxLean.text = String.format("%.1f\u00B0", maxLean)
+
+        val maxAccelG = forces.maxOrNull() ?: 0f
+        binding.tvDetailMaxAccel.text = String.format("%.2f G", maxAccelG)
+
+        val maxBrakeG = forces.minOrNull() ?: 0f
+        binding.tvDetailMaxBrake.text = String.format("%.2f G", abs(maxBrakeG))
+    }
+
+    // --- Lean angle computation from GPS trajectory ---
+
+    private fun bearing(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val dLon = Math.toRadians(lon2 - lon1)
+        val lat1Rad = Math.toRadians(lat1)
+        val lat2Rad = Math.toRadians(lat2)
+        val y = sin(dLon) * cos(lat2Rad)
+        val x = cos(lat1Rad) * sin(lat2Rad) - sin(lat1Rad) * cos(lat2Rad) * cos(dLon)
+        return atan2(y, x)
+    }
+
+    private fun computeLeanAngles(points: List<GpxParser.TrackPoint>): FloatArray {
+        val hasSensorData = points.any { !it.leanAngleDeg.isNaN() }
+        if (hasSensorData) {
+            return FloatArray(points.size) { i ->
+                val lean = points[i].leanAngleDeg
+                if (lean.isNaN()) 0f else abs(lean)
+            }
+        }
+
+        // Fallback: estimate from GPS trajectory
+        val result = FloatArray(points.size)
+        for (i in 1 until points.size - 1) {
+            val prev = points[i - 1]
+            val curr = points[i]
+            val next = points[i + 1]
+
+            val speed = curr.speed.toDouble()
+            if (speed < 2.0) continue
+
+            val bearing1 = bearing(prev.lat, prev.lon, curr.lat, curr.lon)
+            val bearing2 = bearing(curr.lat, curr.lon, next.lat, next.lon)
+
+            var dBearing = bearing2 - bearing1
+            while (dBearing > Math.PI) dBearing -= 2 * Math.PI
+            while (dBearing < -Math.PI) dBearing += 2 * Math.PI
+
+            val absDelta = abs(dBearing)
+            if (absDelta < 0.001) continue
+
+            val dist = GpxParser.haversine(prev.lat, prev.lon, curr.lat, curr.lon) * 1000.0
+            if (dist < 1.0) continue
+
+            val radius = dist / absDelta
+            val lateralAccel = speed * speed / radius
+            val leanRad = atan(lateralAccel / GRAVITY)
+            result[i] = Math.toDegrees(leanRad).toFloat().coerceAtMost(60f)
+        }
+        return result
+    }
+
+    // --- Longitudinal force computation ---
+
+    private fun computeForces(points: List<GpxParser.TrackPoint>): FloatArray {
+        val hasSensorData = points.any { !it.longitudinalAccelMps2.isNaN() }
+        if (hasSensorData) {
+            return FloatArray(points.size) { i ->
+                val accel = points[i].longitudinalAccelMps2
+                if (accel.isNaN()) 0f else (accel / GRAVITY.toFloat())
+            }
+        }
+
+        // Fallback: estimate from speed changes
+        val result = FloatArray(points.size)
+        for (i in 1 until points.size) {
+            val dtMs = points[i].timeMs - points[i - 1].timeMs
+            if (dtMs <= 0 || dtMs > 60000) continue
+
+            val dtSec = dtMs / 1000.0
+            val dv = (points[i].speed - points[i - 1].speed).toDouble()
+            result[i] = (dv / dtSec / GRAVITY).toFloat()
+        }
+        return result
     }
 
     private fun formatDuration(ms: Long): String {

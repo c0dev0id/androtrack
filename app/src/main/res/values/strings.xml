@@ -48,4 +48,9 @@
     <string name="pause_time">Pause Time</string>
     <string name="avg_speed">Avg Speed</string>
     <string name="unknown_date">Unknown date</string>
+    <string name="lean_angle">Lean Angle</string>
+    <string name="force">Force</string>
+    <string name="max_lean">Max Lean</string>
+    <string name="max_accel">Max Accel</string>
+    <string name="max_brake">Max Brake</string>
 </resources>
