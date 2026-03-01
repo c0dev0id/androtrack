@@ -38,6 +38,8 @@
     <string name="pref_emulate_power_summary">Record without charger. Ignores plug/unplug events.</string>
     <string name="pref_update_interval_title">GPS update interval</string>
     <string name="pref_min_distance_title">Minimum distance</string>
+    <string name="pref_sensor_recording_title">Record lean &amp; acceleration</string>
+    <string name="pref_sensor_recording_summary">Capture lean angle and acceleration data from motion sensors. Keep bike upright when recording starts.</string>
     <string name="track_detail">Track Detail</string>
     <string name="altitude">Altitude</string>
     <string name="speed">Speed</string>

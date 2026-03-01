@@ -571,6 +571,7 @@ class RideListActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("androtrack_settings", Context.MODE_PRIVATE)
 
         val switchEmulatePower = dialogView.findViewById<SwitchCompat>(R.id.switchEmulatePower)
+        val switchSensorRecording = dialogView.findViewById<SwitchCompat>(R.id.switchSensorRecording)
         val seekUpdateInterval = dialogView.findViewById<SeekBar>(R.id.seekUpdateInterval)
         val tvUpdateIntervalValue = dialogView.findViewById<TextView>(R.id.tvUpdateIntervalValue)
         val seekMinDistance = dialogView.findViewById<SeekBar>(R.id.seekMinDistance)
@@ -578,6 +579,7 @@ class RideListActivity : AppCompatActivity() {
 
         // Load current values
         switchEmulatePower.isChecked = prefs.getBoolean("pref_emulate_power", false)
+        switchSensorRecording.isChecked = prefs.getBoolean("pref_sensor_recording", true)
         val currentIntervalSec = prefs.getFloat("pref_update_interval_sec", 0.2f)
         val currentMinDistanceM = prefs.getFloat("pref_min_distance_m", 0f)
 
@@ -621,6 +623,7 @@ class RideListActivity : AppCompatActivity() {
 
                 prefs.edit()
                     .putBoolean("pref_emulate_power", switchEmulatePower.isChecked)
+                    .putBoolean("pref_sensor_recording", switchSensorRecording.isChecked)
                     .putFloat("pref_update_interval_sec", intervalSec)
                     .putFloat("pref_min_distance_m", finalDistanceM)
                     .apply()

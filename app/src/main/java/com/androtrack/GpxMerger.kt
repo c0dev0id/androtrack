@@ -20,7 +20,9 @@ object GpxMerger {
         val time: String,
         val speed: String,
         val ele: String,
-        val timeMs: Long
+        val timeMs: Long,
+        val lean: String = "",
+        val accel: String = ""
     )
 
     fun merge(files: List<File>, outputDir: File): File? {
@@ -36,7 +38,7 @@ object GpxMerger {
         outFile.bufferedWriter().use { writer ->
             writer.write("""<?xml version="1.0" encoding="UTF-8"?>""")
             writer.newLine()
-            writer.write("""<gpx version="1.1" creator="AndroTrack" xmlns="http://www.topografix.com/GPX/1/1">""")
+            writer.write("""<gpx version="1.1" creator="AndroTrack" xmlns="http://www.topografix.com/GPX/1/1" xmlns:androtrack="http://androtrack.codevoid.de/gpx/1">""")
             writer.newLine()
 
             for ((index, points) in fileTracks.withIndex()) {
@@ -60,6 +62,20 @@ object GpxMerger {
                     }
                     if (pt.speed.isNotEmpty()) {
                         writer.write("        <speed>${pt.speed}</speed>")
+                        writer.newLine()
+                    }
+                    if (pt.lean.isNotEmpty() || pt.accel.isNotEmpty()) {
+                        writer.write("        <extensions>")
+                        writer.newLine()
+                        if (pt.lean.isNotEmpty()) {
+                            writer.write("          <androtrack:lean>${pt.lean}</androtrack:lean>")
+                            writer.newLine()
+                        }
+                        if (pt.accel.isNotEmpty()) {
+                            writer.write("          <androtrack:accel>${pt.accel}</androtrack:accel>")
+                            writer.newLine()
+                        }
+                        writer.write("        </extensions>")
                         writer.newLine()
                     }
                     writer.write("      </trkpt>")
@@ -88,11 +104,14 @@ object GpxMerger {
                 parser.setInput(fis, null)
 
                 var inTrkpt = false
+                var inExtensions = false
                 var lat = ""
                 var lon = ""
                 var time = ""
                 var speed = ""
                 var ele = ""
+                var lean = ""
+                var accel = ""
                 var currentTag = ""
 
                 var eventType = parser.eventType
@@ -104,25 +123,36 @@ object GpxMerger {
                                 inTrkpt = true
                                 lat = parser.getAttributeValue(null, "lat") ?: ""
                                 lon = parser.getAttributeValue(null, "lon") ?: ""
-                                time = ""; speed = ""; ele = ""
+                                time = ""; speed = ""; ele = ""; lean = ""; accel = ""
+                            } else if (currentTag == "extensions") {
+                                inExtensions = true
                             }
                         }
                         XmlPullParser.TEXT -> {
                             if (inTrkpt) {
                                 val text = parser.text.trim()
-                                when (currentTag) {
-                                    "time" -> time = text
-                                    "speed" -> speed = text
-                                    "ele" -> ele = text
+                                if (inExtensions) {
+                                    when (currentTag) {
+                                        "androtrack:lean", "lean" -> lean = text
+                                        "androtrack:accel", "accel" -> accel = text
+                                    }
+                                } else {
+                                    when (currentTag) {
+                                        "time" -> time = text
+                                        "speed" -> speed = text
+                                        "ele" -> ele = text
+                                    }
                                 }
                             }
                         }
                         XmlPullParser.END_TAG -> {
-                            if (parser.name == "trkpt" && inTrkpt) {
+                            if (parser.name == "extensions") {
+                                inExtensions = false
+                            } else if (parser.name == "trkpt" && inTrkpt) {
                                 inTrkpt = false
                                 if (lat.isNotEmpty() && lon.isNotEmpty()) {
                                     val timeMs = parseTimeMs(time)
-                                    points.add(RawPoint(lat, lon, time, speed, ele, timeMs))
+                                    points.add(RawPoint(lat, lon, time, speed, ele, timeMs, lean, accel))
                                 }
                             }
                             if (parser.name == currentTag) currentTag = ""

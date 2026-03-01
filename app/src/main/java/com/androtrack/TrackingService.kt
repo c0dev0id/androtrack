@@ -87,6 +87,7 @@ class TrackingService : Service() {
         val intervalSec = prefs.getFloat("pref_update_interval_sec", DEFAULT_LOCATION_INTERVAL_MS / 1000f)
         locationIntervalMs = (intervalSec * 1000).toLong()
         locationMinDistance = prefs.getFloat("pref_min_distance_m", DEFAULT_LOCATION_MIN_DISTANCE)
+        sensorRecordingEnabled = prefs.getBoolean("pref_sensor_recording", true)
     }
 
     data class GpxTrackPoint(
@@ -94,11 +95,15 @@ class TrackingService : Service() {
         val lon: Double,
         val speed: Float,
         val timeMs: Long,
-        val ele: Double = 0.0
+        val ele: Double = 0.0,
+        val leanAngleDeg: Float = Float.NaN,
+        val longitudinalAccelMps2: Float = Float.NaN
     )
 
     private var locationManager: LocationManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var bikeSensorManager: BikeSensorManager? = null
+    private var sensorRecordingEnabled = true
 
     private val trackPoints = mutableListOf<GpxTrackPoint>()
     private var currentGpxFile: File? = null
@@ -171,12 +176,15 @@ class TrackingService : Service() {
             lastLocationTimeNs = nowNs
 
             if (isRecording) {
+                val sensor = bikeSensorManager
                 val point = GpxTrackPoint(
                     lat = location.latitude,
                     lon = location.longitude,
                     speed = if (location.hasSpeed()) location.speed else 0f,
                     timeMs = location.time,
-                    ele = if (location.hasAltitude()) location.altitude else 0.0
+                    ele = if (location.hasAltitude()) location.altitude else 0.0,
+                    leanAngleDeg = if (sensor?.isActive == true) sensor.leanAngleDeg else Float.NaN,
+                    longitudinalAccelMps2 = if (sensor?.isActive == true) sensor.longitudinalAccel else Float.NaN
                 )
                 val last = lastTrackPoint
                 if (last != null) {
@@ -236,6 +244,13 @@ class TrackingService : Service() {
                 if (isRecording) {
                     stopLocationUpdates()
                     startLocationUpdates()
+                    if (sensorRecordingEnabled && bikeSensorManager == null) {
+                        bikeSensorManager = BikeSensorManager(this)
+                        bikeSensorManager?.start()
+                    } else if (!sensorRecordingEnabled && bikeSensorManager != null) {
+                        bikeSensorManager?.stop()
+                        bikeSensorManager = null
+                    }
                 }
                 if (emulatePower && !isRecording) {
                     startRecording()
@@ -377,6 +392,10 @@ class TrackingService : Service() {
         }
 
         acquireWakeLock()
+        if (isFreshStart && sensorRecordingEnabled) {
+            bikeSensorManager = BikeSensorManager(this)
+            bikeSensorManager?.start()
+        }
         startLocationUpdates()
         handler.removeCallbacks(statsUpdater)
         handler.post(statsUpdater)
@@ -402,6 +421,8 @@ class TrackingService : Service() {
         handler.postDelayed(stopTimer, NO_MOVEMENT_TIMEOUT_MS)
         // statsUpdater keeps running so the UI card continues to update
         stopLocationUpdates()
+        bikeSensorManager?.stop()
+        bikeSensorManager = null
         releaseWakeLock()
         sendBroadcast(Intent(ACTION_TRACKING_PAUSED).setPackage(packageName))
         updateNotification()
@@ -419,6 +440,8 @@ class TrackingService : Service() {
         handler.removeCallbacks(statsUpdater)
         handler.removeCallbacks(incrementFlusher)
         stopLocationUpdates()
+        bikeSensorManager?.stop()
+        bikeSensorManager = null
         finalizeSession()
         releaseWakeLock()
         sendBroadcast(Intent(ACTION_TRACKING_STOPPED).setPackage(packageName))
