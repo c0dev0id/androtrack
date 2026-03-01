@@ -4,10 +4,36 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- Route/trail curve -->
+    <path
+        android:pathData="M10,82 C30,66 42,54 54,54 C66,54 78,42 98,26"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.5"
+        android:fillColor="#00000000" />
+
+    <!-- Pin shadow -->
+    <path
+        android:fillColor="#000000"
+        android:fillAlpha="0.15"
+        android:pathData="M56,29 C43.5,29 34,38.5 34,47 C34,60.5 56,78 56,78 C56,78 78,60.5 78,47 C78,38.5 68.5,29 56,29 Z" />
+
+    <!-- Pin body -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,30 C43,30 34,39 34,50 C34,62 54,80 54,80 C54,80 74,62 74,50 C74,39 65,30 54,30 Z" />
+        android:pathData="M54,75 C54,75 34,58 34,44 C34,33 43,26 54,26 C65,26 74,33 74,44 C74,58 54,75 54,75 Z" />
+
+    <!-- Pin inner circle (orange accent) -->
     <path
-        android:fillColor="#1565C0"
-        android:pathData="M54,43 C49.6,43 46,46.6 46,51 C46,55.4 49.6,59 54,59 C58.4,59 62,55.4 62,51 C62,46.6 58.4,43 54,43 Z" />
+        android:fillColor="#FF6D00"
+        android:pathData="M54,35 C48,35 43,40 43,46 C43,52 48,57 54,57 C60,57 65,52 65,46 C65,40 60,35 54,35 Z" />
+
+    <!-- Highlight dot (polish/reflection) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.4"
+        android:pathData="M50,40 C48,40 46.5,41.5 46.5,43.5 C46.5,45.5 48,47 50,47 C52,47 53.5,45.5 53.5,43.5 C53.5,41.5 52,40 50,40 Z" />
+
 </vector>
