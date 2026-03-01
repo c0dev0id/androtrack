@@ -586,8 +586,8 @@ class RideListActivity : AppCompatActivity() {
         seekUpdateInterval.progress = intervalProgress
         tvUpdateIntervalValue.text = String.format("%.1f s", currentIntervalSec)
 
-        // Map distance (0m–50m) to seekbar (0–99); 0 = off (no filter)
-        val distProgress = (currentMinDistanceM / 50f * 99f).toInt().coerceIn(0, 99)
+        // Map distance (0m–20m) to seekbar (0–99); 0 = off (no filter)
+        val distProgress = (currentMinDistanceM / 20f * 99f).toInt().coerceIn(0, 99)
         seekMinDistance.progress = distProgress
         tvMinDistanceValue.text = if (currentMinDistanceM == 0f) "Off (no filter)"
             else String.format("%.1f m", currentMinDistanceM)
@@ -603,7 +603,7 @@ class RideListActivity : AppCompatActivity() {
 
         seekMinDistance.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                val value = progress / 99f * 50f
+                val value = progress / 99f * 20f
                 tvMinDistanceValue.text = if (value < 0.05f) "Off (no filter)"
                     else String.format("%.1f m", value)
             }
@@ -616,7 +616,7 @@ class RideListActivity : AppCompatActivity() {
             .setView(dialogView)
             .setPositiveButton(getString(R.string.ok)) { _, _ ->
                 val intervalSec = 0.1f + (seekUpdateInterval.progress / 99f) * 9.9f
-                val distanceM = seekMinDistance.progress / 99f * 50f
+                val distanceM = seekMinDistance.progress / 99f * 20f
                 val finalDistanceM = if (distanceM < 0.05f) 0f else distanceM
 
                 prefs.edit()
