@@ -144,6 +144,13 @@ class RideListActivity : AppCompatActivity() {
                     } else {
                         actionMode?.title = "$count selected"
                     }
+                } else {
+                    val item = adapter.getItemAt(position)
+                    if (item != null) {
+                        val intent = Intent(this, TrackDetailActivity::class.java)
+                        intent.putExtra(TrackDetailActivity.EXTRA_FILE_PATH, item.file.absolutePath)
+                        startActivity(intent)
+                    }
                 }
             },
             onItemLongClick = { position, anchorView ->

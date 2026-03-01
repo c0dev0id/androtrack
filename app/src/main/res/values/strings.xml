@@ -38,4 +38,12 @@
     <string name="pref_emulate_power_summary">Record without charger. Ignores plug/unplug events.</string>
     <string name="pref_update_interval_title">GPS update interval</string>
     <string name="pref_min_distance_title">Minimum distance</string>
+    <string name="track_detail">Track Detail</string>
+    <string name="altitude">Altitude</string>
+    <string name="speed">Speed</string>
+    <string name="track_length">Track Length</string>
+    <string name="riding_time">Riding Time</string>
+    <string name="pause_time">Pause Time</string>
+    <string name="avg_speed">Avg Speed</string>
+    <string name="unknown_date">Unknown date</string>
 </resources>
