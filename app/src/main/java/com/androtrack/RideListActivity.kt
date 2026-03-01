@@ -230,9 +230,6 @@ class RideListActivity : AppCompatActivity() {
             action = TrackingService.ACTION_START
         }
         ContextCompat.startForegroundService(this, intent)
-        isTracking = true
-        updateFab()
-        binding.statsCard.visibility = View.VISIBLE
     }
 
     private fun stopTrackingService() {
