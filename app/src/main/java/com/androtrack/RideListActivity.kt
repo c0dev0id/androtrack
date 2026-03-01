@@ -117,13 +117,10 @@ class RideListActivity : AppCompatActivity() {
 
     companion object {
         private const val REQUEST_PERMISSIONS = 100
-        private val REQUIRED_PERMISSIONS = buildList {
-            add(Manifest.permission.ACCESS_FINE_LOCATION)
-            add(Manifest.permission.ACCESS_COARSE_LOCATION)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                add(Manifest.permission.ACTIVITY_RECOGNITION)
-            }
-        }.toTypedArray()
+        private val REQUIRED_PERMISSIONS = arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -273,10 +270,10 @@ class RideListActivity : AppCompatActivity() {
     /**
      * Updates all fields of the stats card from an ACTION_STATS_UPDATE broadcast.
      *
-     * Three always-visible rows show the auto-pause state at a glance:
-     * - tvStatsAutoPause: countdown to auto-pause while recording, or how long paused so far.
-     * - tvStatsLastMotion: seconds/minutes since the last detected motion event.
-     * - tvStatsReason: what triggered the current state and what will trigger the next change.
+     * Three always-visible rows show the power/pause state at a glance:
+     * - tvStatsAutoPause: power connection status and session-finalize countdown when paused.
+     * - tvStatsLastMotion: how long the service has been paused on battery.
+     * - tvStatsReason: what will trigger the next state change.
      */
     private fun updateStatsPanel(intent: Intent) {
         val distanceM = intent.getDoubleExtra(TrackingService.EXTRA_DISTANCE_M, 0.0)
@@ -284,10 +281,7 @@ class RideListActivity : AppCompatActivity() {
         val recording = intent.getBooleanExtra(TrackingService.EXTRA_IS_RECORDING, false)
         val fileName = intent.getStringExtra(TrackingService.EXTRA_FILE_NAME) ?: ""
         val pauseTimeoutMs = intent.getLongExtra(TrackingService.EXTRA_PAUSE_TIMEOUT_MS, 0L)
-        val timeoutS = intent.getLongExtra(TrackingService.EXTRA_PAUSE_TIMEOUT_SETTING_S, 1200L)
-        val lastMotionAgoMs = intent.getLongExtra(TrackingService.EXTRA_LAST_MOTION_AGO_MS, -1L)
         val pausedForMs = intent.getLongExtra(TrackingService.EXTRA_PAUSED_FOR_MS, 0L)
-        val startReason = intent.getStringExtra(TrackingService.EXTRA_START_REASON) ?: "service_start"
         val curAccuracy = intent.getFloatExtra(TrackingService.EXTRA_CURRENT_ACCURACY, 0f)
         val avgAccuracy = intent.getFloatExtra(TrackingService.EXTRA_AVG_ACCURACY, 0f)
         val curRate = intent.getFloatExtra(TrackingService.EXTRA_CURRENT_UPDATE_RATE, 0f)
@@ -304,25 +298,27 @@ class RideListActivity : AppCompatActivity() {
         binding.tvStatsDistance.text = String.format("Distance: %.2f km", distanceM / 1000.0)
         binding.tvStatsDuration.text = "Time: ${formatDuration(durationMs)}"
 
-        // Auto-pause row: countdown while recording; elapsed pause time when stopped
+        // Power row: connection status and session-finalize countdown when paused
         binding.tvStatsAutoPause.text = if (recording) {
-            "Auto-pause in: ${formatDuration(pauseTimeoutMs)} (${timeoutS}s no-motion timeout)"
+            "Power: connected"
+        } else if (pauseTimeoutMs > 0) {
+            "Power: disconnected – same file if reconnected within ${formatDuration(pauseTimeoutMs)}"
         } else {
-            "Auto-paused: no motion for ${timeoutS}s. Paused for ${formatDuration(pausedForMs)}"
+            "Power: disconnected – next ride starts new file"
         }
 
-        // Last motion row
-        binding.tvStatsLastMotion.text = if (lastMotionAgoMs >= 0) {
-            "Last motion: ${formatDuration(lastMotionAgoMs)} ago"
+        // Pause duration row
+        binding.tvStatsLastMotion.text = if (recording) {
+            "Pauses: when charger disconnects"
         } else {
-            "Last motion: —"
+            "Paused for: ${formatDuration(pausedForMs)}"
         }
 
         // Reason row
         binding.tvStatsReason.text = if (recording) {
-            "Started: ${startReason.replace('_', ' ')}"
+            "Recording – charger connected"
         } else {
-            "Resumes: when motion detected"
+            "Resumes: when charger connected"
         }
 
         binding.tvStatsAccuracy.text = String.format("Accuracy: %.1fm", curAccuracy)

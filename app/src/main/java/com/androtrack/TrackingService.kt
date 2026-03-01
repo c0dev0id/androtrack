@@ -6,33 +6,32 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
-import android.hardware.Sensor
-import androidx.core.content.ContextCompat
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.sqrt
-import kotlin.math.sin
-import kotlin.math.cos
 import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 class TrackingService : Service() {
 
@@ -41,7 +40,7 @@ class TrackingService : Service() {
         const val ACTION_STOP = "com.androtrack.STOP"
         const val ACTION_TRACKING_STARTED = "com.androtrack.TRACKING_STARTED"
         const val ACTION_TRACKING_STOPPED = "com.androtrack.TRACKING_STOPPED"
-        /** Sent when recording stops due to the no-motion timeout; service stays alive waiting for motion. */
+        /** Sent when the charger is disconnected; service stays alive waiting for power to reconnect. */
         const val ACTION_TRACKING_PAUSED = "com.androtrack.TRACKING_PAUSED"
         const val ACTION_STATS_UPDATE = "com.androtrack.STATS_UPDATE"
 
@@ -54,30 +53,19 @@ class TrackingService : Service() {
         const val EXTRA_AVG_ACCURACY = "avg_accuracy"
         const val EXTRA_CURRENT_UPDATE_RATE = "current_update_rate"
         const val EXTRA_AVG_UPDATE_RATE = "avg_update_rate"
-        /** The configured no-motion auto-pause threshold in seconds (e.g. 1200 for 20 min). */
-        const val EXTRA_PAUSE_TIMEOUT_SETTING_S = "pause_timeout_setting_s"
-        /** Milliseconds elapsed since the last motion event above MOTION_THRESHOLD; -1 if no motion seen yet. */
-        const val EXTRA_LAST_MOTION_AGO_MS = "last_motion_ago_ms"
-        /** Milliseconds the service has been in the auto-paused state; 0 while actively recording. */
+        /** Milliseconds the service has been in the paused state; 0 while actively recording. */
         const val EXTRA_PAUSED_FOR_MS = "paused_for_ms"
-        /** Human-readable reason the current recording session was started ("motion_detected" or "service_start"). */
-        const val EXTRA_START_REASON = "start_reason"
 
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "TRACK_CHANNEL"
         /**
-         * Auto-pause timeout: 20 minutes (1200 s).
-         * Recording stops and the current GPX file is finalised if no motion above
-         * MOTION_THRESHOLD is detected for this duration.  The service keeps running
-         * and will open a new file as soon as motion resumes.
+         * Session-finalize timeout: 20 minutes (1200 s).
+         * If the charger remains disconnected for this long, the current GPX file is
+         * finalised and session state is cleared.  The service keeps running.
+         * The next time power is connected a new file is opened.
+         * If power reconnects before this timer fires, recording resumes into the same file.
          */
         private const val NO_MOVEMENT_TIMEOUT_MS = 20 * 60 * 1000L
-        /**
-         * Minimum linear-acceleration magnitude (m/s²) required to count as motion.
-         * Resets the auto-pause countdown while recording; triggers a new recording
-         * session when currently paused.
-         */
-        private const val MOTION_THRESHOLD = 0.8f
         private const val LOCATION_INTERVAL_MS = 200L  // 5 Hz; hardware delivers at fastest available rate if slower
         private const val LOCATION_MIN_DISTANCE = 0f
         private const val STATS_UPDATE_INTERVAL_MS = 1000L
@@ -97,7 +85,6 @@ class TrackingService : Service() {
     )
 
     private var locationManager: LocationManager? = null
-    private var sensorManager: SensorManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
     private val trackPoints = mutableListOf<GpxTrackPoint>()
@@ -109,21 +96,26 @@ class TrackingService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     /**
-     * Fires after NO_MOVEMENT_TIMEOUT_MS of no detected motion.
-     * Finalises the current GPX file (stopRecording) and keeps the service alive
-     * waiting for the next motion event to open a new file.
+     * Fires after NO_MOVEMENT_TIMEOUT_MS on battery (charger disconnected).
+     * Finalises the current GPX file and clears session state so that the next
+     * power-connection opens a fresh file.  The service itself keeps running.
      */
-    private val stopTimer = Runnable { stopRecording() }
+    private val stopTimer = Runnable {
+        writeGpxFile()
+        val dir = getExternalFilesDir(null) ?: filesDir
+        IncrementManager.deleteSessionIncrements(dir, sessionTimestamp)
+        trackPoints.clear()
+        currentGpxFile = null
+        sessionTimestamp = ""
+        lastFlushedIndex = 0
+        flushSequenceNumber = 0
+        updateNotification()
+    }
 
     // Stats tracking
     private var recordingStartMs = 0L
-    private var lastStopTimerResetMs = 0L
-    /** Epoch ms of the last accelerometer event whose magnitude exceeded MOTION_THRESHOLD. */
-    private var lastMotionEventMs = 0L
-    /** Epoch ms at which the service entered the auto-paused state; 0 while actively recording. */
+    /** Epoch ms at which the service entered the paused state; 0 while actively recording. */
     private var pausedAtMs = 0L
-    /** Reason the current (or most recent) recording session was started. */
-    private var startReason = "service_start"
     private var currentAccuracy = 0f
     private var accuracySum = 0.0
     private var accuracyCount = 0L
@@ -180,7 +172,6 @@ class TrackingService : Service() {
                     ele = if (location.hasAltitude()) location.altitude else 0.0
                 )
                 trackPoints.add(point)
-                resetStopTimer()
             }
         }
 
@@ -189,38 +180,24 @@ class TrackingService : Service() {
     }
 
     /**
-     * Watches the linear-acceleration sensor to drive the auto-pause / auto-resume cycle:
-     * - While recording: every motion event above MOTION_THRESHOLD resets the 20-minute
-     *   no-motion countdown via resetStopTimer().
-     * - While paused: the first motion event above MOTION_THRESHOLD resumes recording by
-     *   calling startRecording(), which opens a fresh GPX file.
+     * Responds to USB/charger connection changes.
+     * Connected → start or resume recording.
+     * Disconnected → pause immediately and start the 20-min session-finalize countdown.
      */
-    private val sensorListener = object : SensorEventListener {
-        override fun onSensorChanged(event: SensorEvent) {
-            val x = event.values[0]
-            val y = event.values[1]
-            val z = event.values[2]
-            val magnitude = sqrt(x * x + y * y + z * z)
-            if (magnitude > MOTION_THRESHOLD) {
-                lastMotionEventMs = System.currentTimeMillis()
-                if (!isRecording) {
-                    startReason = "motion_detected"
-                    startRecording()
-                } else {
-                    resetStopTimer()
-                }
+    private val powerReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_POWER_CONNECTED -> if (!isRecording) startRecording()
+                Intent.ACTION_POWER_DISCONNECTED -> if (isRecording) stopRecording()
             }
         }
-
-        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
     }
 
     override fun onCreate() {
         super.onCreate()
         locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         createNotificationChannel()
-        registerMotionSensor()
+        registerPowerReceiver()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -231,7 +208,7 @@ class TrackingService : Service() {
                     return START_NOT_STICKY
                 }
                 if (!startForegroundWithNotification()) return START_NOT_STICKY
-                if (!isRecording) startRecording()
+                if (!isRecording && isCharging()) startRecording()
             }
             ACTION_STOP -> {
                 stopServiceFully()
@@ -258,9 +235,31 @@ class TrackingService : Service() {
         handler.removeCallbacks(incrementFlusher)
         if (isRecording) stopRecording()
         isRunning = false
-        unregisterMotionSensor()
+        unregisterPowerReceiver()
         stopLocationUpdates()
         releaseWakeLock()
+    }
+
+    private fun registerPowerReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_POWER_CONNECTED)
+            addAction(Intent.ACTION_POWER_DISCONNECTED)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(powerReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(powerReceiver, filter)
+        }
+    }
+
+    private fun unregisterPowerReceiver() {
+        try { unregisterReceiver(powerReceiver) } catch (e: Exception) { /* ignore */ }
+    }
+
+    /** Returns true if the device is currently powered via USB/charger. */
+    private fun isCharging(): Boolean {
+        val status = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        return (status?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
     }
 
     private fun startForegroundWithNotification(): Boolean {
@@ -294,7 +293,7 @@ class TrackingService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("AndroTrack")
-            .setContentText(if (isRecording) "Recording track..." else "Waiting for movement...")
+            .setContentText(if (isRecording) "Recording track..." else "Waiting for charger...")
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentIntent(pendingIntent)
             .addAction(android.R.drawable.ic_media_pause, "Stop", stopIntent)
@@ -315,45 +314,40 @@ class TrackingService : Service() {
         nm?.createNotificationChannel(channel)
     }
 
-    private fun registerMotionSensor() {
-        val sensor = sensorManager?.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION) ?: return
-        sensorManager?.registerListener(sensorListener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
-    }
-
-    private fun unregisterMotionSensor() {
-        sensorManager?.unregisterListener(sensorListener)
-    }
-
     /**
-     * Begins a new recording session: opens a fresh GPX file, registers for GPS updates,
-     * and starts the 1-second stats-broadcast loop.
-     * Each call (including resumes after auto-pause) creates a separate file named
-     * track_yyyy-MM-dd_HH-mm-ss.gpx.
+     * Begins or resumes a recording session.
+     * - Fresh start (currentGpxFile == null): creates a new GPX file, resets all state.
+     * - Resumption (currentGpxFile != null, within the 20-min window): continues appending
+     *   to the existing file and track-point list.
      */
     private fun startRecording() {
+        handler.removeCallbacks(stopTimer)  // cancel any pending session-finalize timer
         isRecording = true
         isRunning = true
         pausedAtMs = 0L
-        trackPoints.clear()
-        recordingStartMs = System.currentTimeMillis()
-        // Reset GPS stats
-        currentAccuracy = 0f
-        accuracySum = 0.0
-        accuracyCount = 0
-        lastLocationTimeNs = 0L
-        currentUpdateRateHz = 0f
-        updateRateSum = 0.0
-        updateRateCount = 0
-        val timestamp = fileNameFormat.format(Date())
-        val dir = getExternalFilesDir(null) ?: filesDir
-        currentGpxFile = File(dir, "track_$timestamp.gpx")
-        sessionTimestamp = timestamp
-        lastFlushedIndex = 0
-        flushSequenceNumber = 0
-        IncrementManager.getIncrementDir(dir)
+
+        val isFreshStart = currentGpxFile == null
+        if (isFreshStart) {
+            trackPoints.clear()
+            recordingStartMs = System.currentTimeMillis()
+            currentAccuracy = 0f
+            accuracySum = 0.0
+            accuracyCount = 0
+            lastLocationTimeNs = 0L
+            currentUpdateRateHz = 0f
+            updateRateSum = 0.0
+            updateRateCount = 0
+            val timestamp = fileNameFormat.format(Date())
+            val dir = getExternalFilesDir(null) ?: filesDir
+            currentGpxFile = File(dir, "track_$timestamp.gpx")
+            sessionTimestamp = timestamp
+            lastFlushedIndex = 0
+            flushSequenceNumber = 0
+            IncrementManager.getIncrementDir(dir)
+        }
+
         acquireWakeLock()
         startLocationUpdates()
-        resetStopTimer()
         handler.removeCallbacks(statsUpdater)
         handler.post(statsUpdater)
         handler.removeCallbacks(incrementFlusher)
@@ -363,20 +357,20 @@ class TrackingService : Service() {
     }
 
     /**
-     * Auto-pause: called by stopTimer after NO_MOVEMENT_TIMEOUT_MS of no motion.
-     * Finalises the current GPX file and stops GPS/wake-lock to save battery,
-     * but keeps the service running and the statsUpdater broadcasting so the UI
-     * can continue showing the paused state and countdown.
-     * Recording resumes (new file) when motion is detected again via sensorListener.
+     * Pauses recording when the charger is disconnected.
+     * Stops GPS and releases the wake lock to save battery, but keeps the service
+     * alive and the statsUpdater broadcasting.  If the charger reconnects within
+     * NO_MOVEMENT_TIMEOUT_MS the session resumes into the same file; after that
+     * timeout the session is finalised and the next power-on starts a new file.
      */
     private fun stopRecording() {
         isRecording = false
-        // isRunning stays true — service is alive waiting for motion
+        // isRunning stays true — service remains alive waiting for charger
         pausedAtMs = System.currentTimeMillis()
         handler.removeCallbacks(stopTimer)
+        handler.postDelayed(stopTimer, NO_MOVEMENT_TIMEOUT_MS)
         // statsUpdater keeps running so the UI card continues to update
         stopLocationUpdates()
-        writeGpxFile()
         releaseWakeLock()
         sendBroadcast(Intent(ACTION_TRACKING_PAUSED).setPackage(packageName))
         updateNotification()
@@ -421,17 +415,6 @@ class TrackingService : Service() {
         locationManager?.removeUpdates(locationListener)
     }
 
-    /**
-     * Resets the no-motion countdown to zero (NO_MOVEMENT_TIMEOUT_MS = 1200 s).
-     * Called on every GPS location update while recording — location updates only
-     * arrive when the device is moving, so this effectively resets on real motion.
-     */
-    private fun resetStopTimer() {
-        handler.removeCallbacks(stopTimer)
-        handler.postDelayed(stopTimer, NO_MOVEMENT_TIMEOUT_MS)
-        lastStopTimerResetMs = System.currentTimeMillis()
-    }
-
     private fun flushIncrement() {
         val currentSize = trackPoints.size
         if (currentSize <= lastFlushedIndex) return
@@ -463,12 +446,10 @@ class TrackingService : Service() {
         val durationMs = if (recordingStartMs > 0) now - recordingStartMs else 0L
         val distanceM = calculateTrackDistance()
         val fileName = currentGpxFile?.name ?: ""
-        val pauseTimeoutMs = if (lastStopTimerResetMs > 0) {
-            val elapsed = now - lastStopTimerResetMs
-            val remaining = NO_MOVEMENT_TIMEOUT_MS - elapsed
+        val pauseTimeoutMs = if (!isRecording && pausedAtMs > 0) {
+            val remaining = NO_MOVEMENT_TIMEOUT_MS - (now - pausedAtMs)
             if (remaining > 0) remaining else 0L
         } else 0L
-        val lastMotionAgoMs = if (lastMotionEventMs > 0) now - lastMotionEventMs else -1L
         val pausedForMs = if (!isRecording && pausedAtMs > 0) now - pausedAtMs else 0L
 
         val avgAccuracy = if (accuracyCount > 0) (accuracySum / accuracyCount).toFloat() else 0f
@@ -480,10 +461,7 @@ class TrackingService : Service() {
             putExtra(EXTRA_IS_RECORDING, isRecording)
             putExtra(EXTRA_FILE_NAME, fileName)
             putExtra(EXTRA_PAUSE_TIMEOUT_MS, pauseTimeoutMs)
-            putExtra(EXTRA_PAUSE_TIMEOUT_SETTING_S, NO_MOVEMENT_TIMEOUT_MS / 1000)
-            putExtra(EXTRA_LAST_MOTION_AGO_MS, lastMotionAgoMs)
             putExtra(EXTRA_PAUSED_FOR_MS, pausedForMs)
-            putExtra(EXTRA_START_REASON, startReason)
             putExtra(EXTRA_CURRENT_ACCURACY, currentAccuracy)
             putExtra(EXTRA_AVG_ACCURACY, avgAccuracy)
             putExtra(EXTRA_CURRENT_UPDATE_RATE, currentUpdateRateHz)

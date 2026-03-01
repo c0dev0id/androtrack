@@ -10,7 +10,7 @@
     <string name="tracking_started">Tracking started</string>
     <string name="tracking_stopped">Tracking stopped</string>
     <string name="status_recording">● Recording</string>
-    <string name="status_paused">● Paused – waiting for movement</string>
+    <string name="status_paused">● Paused – waiting for charger</string>
     <string name="gps_signal">GPS Signal</string>
     <string name="select">Select</string>
     <string name="share">Share</string>
