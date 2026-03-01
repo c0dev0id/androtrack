@@ -167,8 +167,8 @@ class TrackingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
         createNotificationChannel()
         registerMotionSensor()
     }
@@ -219,7 +219,7 @@ class TrackingService : Service() {
                 startForeground(NOTIFICATION_ID, buildNotification())
             }
             true
-        } catch (e: SecurityException) {
+        } catch (e: Exception) {
             stopSelf()
             false
         }
@@ -318,8 +318,8 @@ class TrackingService : Service() {
                 locationListener,
                 Looper.getMainLooper()
             )
-        } catch (e: SecurityException) {
-            // Permission not granted
+        } catch (e: Exception) {
+            // Location updates unavailable
         }
     }
 
