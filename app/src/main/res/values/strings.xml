@@ -30,4 +30,7 @@
     <string name="share_failed">Unable to share track</string>
     <string name="buy_me_a_coffee">☕</string>
     <string name="location_permission_required">Location permission is required for tracking.</string>
+    <string name="recording_recovered_title">Recording Recovered</string>
+    <string name="recording_recovered_message">A previous recording was not saved properly. %1$d track(s) have been recovered.</string>
+    <string name="ok">OK</string>
 </resources>

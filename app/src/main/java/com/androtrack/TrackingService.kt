@@ -25,7 +25,6 @@ import android.os.Looper
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import java.io.File
-import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -82,6 +81,7 @@ class TrackingService : Service() {
         private const val LOCATION_INTERVAL_MS = 200L  // 5 Hz; hardware delivers at fastest available rate if slower
         private const val LOCATION_MIN_DISTANCE = 0f
         private const val STATS_UPDATE_INTERVAL_MS = 1000L
+        private const val INCREMENT_FLUSH_INTERVAL_MS = 10_000L
 
         @Volatile
         var isRunning = false
@@ -103,6 +103,9 @@ class TrackingService : Service() {
     private val trackPoints = mutableListOf<GpxTrackPoint>()
     private var currentGpxFile: File? = null
     private var isRecording = false
+    private var lastFlushedIndex = 0
+    private var flushSequenceNumber = 0
+    private var sessionTimestamp = ""
 
     private val handler = Handler(Looper.getMainLooper())
     /**
@@ -136,9 +139,15 @@ class TrackingService : Service() {
         }
     }
 
-    private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
-        timeZone = java.util.TimeZone.getTimeZone("UTC")
+    private val incrementFlusher = object : Runnable {
+        override fun run() {
+            flushIncrement()
+            if (isRecording) {
+                handler.postDelayed(this, INCREMENT_FLUSH_INTERVAL_MS)
+            }
+        }
     }
+
     private val fileNameFormat = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US)
 
     private val locationListener = object : LocationListener {
@@ -246,6 +255,8 @@ class TrackingService : Service() {
         if (isRecording || isRunning) stopServiceFully()
         handler.removeCallbacks(stopTimer)
         handler.removeCallbacks(statsUpdater)
+        handler.removeCallbacks(incrementFlusher)
+        if (isRecording) stopRecording()
         isRunning = false
         unregisterMotionSensor()
         stopLocationUpdates()
@@ -336,11 +347,17 @@ class TrackingService : Service() {
         val timestamp = fileNameFormat.format(Date())
         val dir = getExternalFilesDir(null) ?: filesDir
         currentGpxFile = File(dir, "track_$timestamp.gpx")
+        sessionTimestamp = timestamp
+        lastFlushedIndex = 0
+        flushSequenceNumber = 0
+        IncrementManager.getIncrementDir(dir)
         acquireWakeLock()
         startLocationUpdates()
         resetStopTimer()
         handler.removeCallbacks(statsUpdater)
         handler.post(statsUpdater)
+        handler.removeCallbacks(incrementFlusher)
+        handler.postDelayed(incrementFlusher, INCREMENT_FLUSH_INTERVAL_MS)
         sendBroadcast(Intent(ACTION_TRACKING_STARTED).setPackage(packageName))
         updateNotification()
     }
@@ -375,8 +392,12 @@ class TrackingService : Service() {
         isRunning = false
         handler.removeCallbacks(stopTimer)
         handler.removeCallbacks(statsUpdater)
+        handler.removeCallbacks(incrementFlusher)
         stopLocationUpdates()
+        flushIncrement()
         writeGpxFile()
+        val dir = getExternalFilesDir(null) ?: filesDir
+        IncrementManager.deleteSessionIncrements(dir, sessionTimestamp)
         releaseWakeLock()
         sendBroadcast(Intent(ACTION_TRACKING_STOPPED).setPackage(packageName))
         updateNotification()
@@ -411,36 +432,30 @@ class TrackingService : Service() {
         lastStopTimerResetMs = System.currentTimeMillis()
     }
 
+    private fun flushIncrement() {
+        val currentSize = trackPoints.size
+        if (currentSize <= lastFlushedIndex) return
+        val dir = getExternalFilesDir(null) ?: filesDir
+        val newPoints = trackPoints.subList(lastFlushedIndex, currentSize).toList()
+        val success = IncrementManager.writeIncrement(
+            storageDir = dir,
+            sessionTimestamp = sessionTimestamp,
+            sequenceNumber = flushSequenceNumber,
+            points = newPoints
+        )
+        if (success) {
+            lastFlushedIndex = currentSize
+            flushSequenceNumber++
+        }
+    }
+
     private fun writeGpxFile() {
         val file = currentGpxFile ?: return
         if (trackPoints.isEmpty()) {
             file.delete()
             return
         }
-        try {
-            FileWriter(file).use { writer ->
-                writer.write("""<?xml version="1.0" encoding="UTF-8"?>""")
-                writer.write("\n")
-                writer.write("""<gpx version="1.1" creator="AndroTrack" xmlns="http://www.topografix.com/GPX/1/1">""")
-                writer.write("\n")
-                writer.write("  <trk>\n")
-                writer.write("    <name>Track ${fileNameFormat.format(Date(trackPoints.first().timeMs))}</name>\n")
-                writer.write("    <trkseg>\n")
-                for (pt in trackPoints) {
-                    writer.write("""      <trkpt lat="${pt.lat}" lon="${pt.lon}">""")
-                    writer.write("\n")
-                    writer.write("        <ele>${pt.ele}</ele>\n")
-                    writer.write("        <time>${isoFormat.format(Date(pt.timeMs))}</time>\n")
-                    writer.write("        <speed>${pt.speed}</speed>\n")
-                    writer.write("      </trkpt>\n")
-                }
-                writer.write("    </trkseg>\n")
-                writer.write("  </trk>\n")
-                writer.write("</gpx>\n")
-            }
-        } catch (e: Exception) {
-            // Failed to write GPX
-        }
+        IncrementManager.writeGpxFile(file, trackPoints)
     }
 
     private fun broadcastStats() {

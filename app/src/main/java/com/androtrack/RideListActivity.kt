@@ -164,6 +164,7 @@ class RideListActivity : AppCompatActivity() {
 
         checkAndRequestPermissions()
         loadRides()
+        checkForOrphanedIncrements()
     }
 
     override fun onResume() {
@@ -527,6 +528,31 @@ class RideListActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             Toast.makeText(this, "Merge failed: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun checkForOrphanedIncrements() {
+        if (TrackingService.isRunning) return
+        val dir = getExternalFilesDir(null) ?: filesDir
+        val sessions = IncrementManager.findOrphanedSessions(dir)
+        if (sessions.isEmpty()) return
+
+        var recoveredCount = 0
+        for ((sessionTimestamp, files) in sessions) {
+            val gpxFile = IncrementManager.mergeIncrementsToGpx(dir, sessionTimestamp, files)
+            if (gpxFile != null) {
+                IncrementManager.deleteSessionIncrements(dir, sessionTimestamp)
+                recoveredCount++
+            }
+        }
+
+        if (recoveredCount > 0) {
+            loadRides()
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.recording_recovered_title))
+                .setMessage(getString(R.string.recording_recovered_message, recoveredCount))
+                .setPositiveButton(getString(R.string.ok), null)
+                .show()
         }
     }
 
