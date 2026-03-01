@@ -43,6 +43,7 @@ class TrackingService : Service() {
         /** Sent when the charger is disconnected; service stays alive waiting for power to reconnect. */
         const val ACTION_TRACKING_PAUSED = "com.androtrack.TRACKING_PAUSED"
         const val ACTION_STATS_UPDATE = "com.androtrack.STATS_UPDATE"
+        const val ACTION_RELOAD_SETTINGS = "com.androtrack.RELOAD_SETTINGS"
 
         const val EXTRA_DISTANCE_M = "distance_m"
         const val EXTRA_DURATION_MS = "duration_ms"
@@ -66,14 +67,26 @@ class TrackingService : Service() {
          * If power reconnects before this timer fires, recording resumes into the same file.
          */
         private const val NO_MOVEMENT_TIMEOUT_MS = 20 * 60 * 1000L
-        private const val LOCATION_INTERVAL_MS = 200L  // 5 Hz; hardware delivers at fastest available rate if slower
-        private const val LOCATION_MIN_DISTANCE = 0f
+        private const val DEFAULT_LOCATION_INTERVAL_MS = 200L
+        private const val DEFAULT_LOCATION_MIN_DISTANCE = 0f
         private const val STATS_UPDATE_INTERVAL_MS = 1000L
         private const val INCREMENT_FLUSH_INTERVAL_MS = 10_000L
 
         @Volatile
         var isRunning = false
             private set
+    }
+
+    private var emulatePower = false
+    private var locationIntervalMs = DEFAULT_LOCATION_INTERVAL_MS
+    private var locationMinDistance = DEFAULT_LOCATION_MIN_DISTANCE
+
+    private fun loadPreferences() {
+        val prefs = getSharedPreferences("androtrack_settings", Context.MODE_PRIVATE)
+        emulatePower = prefs.getBoolean("pref_emulate_power", false)
+        val intervalSec = prefs.getFloat("pref_update_interval_sec", DEFAULT_LOCATION_INTERVAL_MS / 1000f)
+        locationIntervalMs = (intervalSec * 1000).toLong()
+        locationMinDistance = prefs.getFloat("pref_min_distance_m", DEFAULT_LOCATION_MIN_DISTANCE)
     }
 
     data class GpxTrackPoint(
@@ -186,6 +199,7 @@ class TrackingService : Service() {
      */
     private val powerReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            if (emulatePower) return
             when (intent.action) {
                 Intent.ACTION_POWER_CONNECTED -> if (!isRecording) startRecording()
                 Intent.ACTION_POWER_DISCONNECTED -> if (isRecording) stopRecording()
@@ -196,6 +210,7 @@ class TrackingService : Service() {
     override fun onCreate() {
         super.onCreate()
         locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        loadPreferences()
         createNotificationChannel()
         registerPowerReceiver()
     }
@@ -208,11 +223,25 @@ class TrackingService : Service() {
                     return START_NOT_STICKY
                 }
                 if (!startForegroundWithNotification()) return START_NOT_STICKY
-                if (!isRecording && isCharging()) startRecording()
+                if (!isRecording && (isCharging() || emulatePower)) startRecording()
             }
             ACTION_STOP -> {
                 stopServiceFully()
                 stopSelf()
+            }
+            ACTION_RELOAD_SETTINGS -> {
+                loadPreferences()
+                if (isRecording) {
+                    stopLocationUpdates()
+                    startLocationUpdates()
+                }
+                if (emulatePower && !isRecording) {
+                    startRecording()
+                }
+                if (!emulatePower && isRecording && !isCharging()) {
+                    stopRecording()
+                }
+                updateNotification()
             }
             else -> {
                 if (!hasLocationPermission()) {
@@ -291,9 +320,14 @@ class TrackingService : Service() {
             Intent(this, TrackingService::class.java).apply { action = ACTION_STOP },
             PendingIntent.FLAG_IMMUTABLE
         )
+        val contentText = when {
+            isRecording -> "Recording track..."
+            emulatePower -> "Ready – power emulated"
+            else -> "Waiting for charger..."
+        }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("AndroTrack")
-            .setContentText(if (isRecording) "Recording track..." else "Waiting for charger...")
+            .setContentText(contentText)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentIntent(pendingIntent)
             .addAction(android.R.drawable.ic_media_pause, "Stop", stopIntent)
@@ -401,8 +435,8 @@ class TrackingService : Service() {
         try {
             locationManager?.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
-                LOCATION_INTERVAL_MS,
-                LOCATION_MIN_DISTANCE,
+                locationIntervalMs,
+                locationMinDistance,
                 locationListener,
                 Looper.getMainLooper()
             )

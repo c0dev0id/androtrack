@@ -33,4 +33,9 @@
     <string name="recording_recovered_title">Recording Recovered</string>
     <string name="recording_recovered_message">A previous recording was not saved properly. %1$d track(s) have been recovered.</string>
     <string name="ok">OK</string>
+    <string name="settings">Settings</string>
+    <string name="pref_emulate_power_title">Emulate power on</string>
+    <string name="pref_emulate_power_summary">Record without charger. Ignores plug/unplug events.</string>
+    <string name="pref_update_interval_title">GPS update interval</string>
+    <string name="pref_min_distance_title">Minimum distance</string>
 </resources>

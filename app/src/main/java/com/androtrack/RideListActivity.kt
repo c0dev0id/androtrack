@@ -15,12 +15,15 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.EditText
+import android.widget.SeekBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.androtrack.databinding.ActivityRideListBinding
@@ -299,7 +302,11 @@ class RideListActivity : AppCompatActivity() {
         binding.tvStatsDuration.text = "Time: ${formatDuration(durationMs)}"
 
         // Power row: connection status and session-finalize countdown when paused
-        binding.tvStatsAutoPause.text = if (recording) {
+        val emulatePower = getSharedPreferences("androtrack_settings", Context.MODE_PRIVATE)
+            .getBoolean("pref_emulate_power", false)
+        binding.tvStatsAutoPause.text = if (emulatePower) {
+            "Power: emulated (always on)"
+        } else if (recording) {
             "Power: connected"
         } else if (pauseTimeoutMs > 0) {
             "Power: disconnected – same file if reconnected within ${formatDuration(pauseTimeoutMs)}"
@@ -309,16 +316,16 @@ class RideListActivity : AppCompatActivity() {
 
         // Pause duration row
         binding.tvStatsLastMotion.text = if (recording) {
-            "Pauses: when charger disconnects"
+            if (emulatePower) "Pauses: manual stop only" else "Pauses: when charger disconnects"
         } else {
             "Paused for: ${formatDuration(pausedForMs)}"
         }
 
         // Reason row
         binding.tvStatsReason.text = if (recording) {
-            "Recording – charger connected"
+            if (emulatePower) "Recording – power emulated" else "Recording – charger connected"
         } else {
-            "Resumes: when charger connected"
+            if (emulatePower) "Resumes: automatically" else "Resumes: when charger connected"
         }
 
         binding.tvStatsAccuracy.text = String.format("Accuracy: %.1fm", curAccuracy)
@@ -552,6 +559,76 @@ class RideListActivity : AppCompatActivity() {
         }
     }
 
+    private fun showSettingsDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_settings, null)
+        val prefs = getSharedPreferences("androtrack_settings", Context.MODE_PRIVATE)
+
+        val switchEmulatePower = dialogView.findViewById<SwitchCompat>(R.id.switchEmulatePower)
+        val seekUpdateInterval = dialogView.findViewById<SeekBar>(R.id.seekUpdateInterval)
+        val tvUpdateIntervalValue = dialogView.findViewById<TextView>(R.id.tvUpdateIntervalValue)
+        val seekMinDistance = dialogView.findViewById<SeekBar>(R.id.seekMinDistance)
+        val tvMinDistanceValue = dialogView.findViewById<TextView>(R.id.tvMinDistanceValue)
+
+        // Load current values
+        switchEmulatePower.isChecked = prefs.getBoolean("pref_emulate_power", false)
+        val currentIntervalSec = prefs.getFloat("pref_update_interval_sec", 0.2f)
+        val currentMinDistanceM = prefs.getFloat("pref_min_distance_m", 0f)
+
+        // Map interval (0.1s–10s) to seekbar (0–99)
+        val intervalProgress = ((currentIntervalSec - 0.1f) / 9.9f * 99f).toInt().coerceIn(0, 99)
+        seekUpdateInterval.progress = intervalProgress
+        tvUpdateIntervalValue.text = String.format("%.1f s", currentIntervalSec)
+
+        // Map distance (0m–50m) to seekbar (0–99); 0 = off (no filter)
+        val distProgress = (currentMinDistanceM / 50f * 99f).toInt().coerceIn(0, 99)
+        seekMinDistance.progress = distProgress
+        tvMinDistanceValue.text = if (currentMinDistanceM == 0f) "Off (no filter)"
+            else String.format("%.1f m", currentMinDistanceM)
+
+        seekUpdateInterval.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                val value = 0.1f + (progress / 99f) * 9.9f
+                tvUpdateIntervalValue.text = String.format("%.1f s", value)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar) {}
+        })
+
+        seekMinDistance.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                val value = progress / 99f * 50f
+                tvMinDistanceValue.text = if (value < 0.05f) "Off (no filter)"
+                    else String.format("%.1f m", value)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar) {}
+        })
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.settings))
+            .setView(dialogView)
+            .setPositiveButton(getString(R.string.ok)) { _, _ ->
+                val intervalSec = 0.1f + (seekUpdateInterval.progress / 99f) * 9.9f
+                val distanceM = seekMinDistance.progress / 99f * 50f
+                val finalDistanceM = if (distanceM < 0.05f) 0f else distanceM
+
+                prefs.edit()
+                    .putBoolean("pref_emulate_power", switchEmulatePower.isChecked)
+                    .putFloat("pref_update_interval_sec", intervalSec)
+                    .putFloat("pref_min_distance_m", finalDistanceM)
+                    .apply()
+
+                if (TrackingService.isRunning) {
+                    val intent = Intent(this, TrackingService::class.java).apply {
+                        action = TrackingService.ACTION_RELOAD_SETTINGS
+                    }
+                    startService(intent)
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
     private fun formatDuration(ms: Long): String {
         if (ms <= 0) return "0m"
         val totalSeconds = ms / 1000
@@ -582,6 +659,10 @@ class RideListActivity : AppCompatActivity() {
             }
             R.id.action_refresh -> {
                 loadRides()
+                true
+            }
+            R.id.action_settings -> {
+                showSettingsDialog()
                 true
             }
             else -> super.onOptionsItemSelected(item)
