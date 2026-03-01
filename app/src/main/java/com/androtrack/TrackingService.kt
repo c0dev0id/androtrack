@@ -103,9 +103,10 @@ class TrackingService : Service() {
     private val trackPoints = mutableListOf<GpxTrackPoint>()
     private var currentGpxFile: File? = null
     private var isRecording = false
-    private var lastFlushedIndex = 0
     private var flushSequenceNumber = 0
     private var sessionTimestamp = ""
+    private var totalDistanceM = 0.0
+    private var lastTrackPoint: GpxTrackPoint? = null
 
     private val handler = Handler(Looper.getMainLooper())
     /**
@@ -114,14 +115,7 @@ class TrackingService : Service() {
      * power-connection opens a fresh file.  The service itself keeps running.
      */
     private val stopTimer = Runnable {
-        writeGpxFile()
-        val dir = getExternalFilesDir(null) ?: filesDir
-        IncrementManager.deleteSessionIncrements(dir, sessionTimestamp)
-        trackPoints.clear()
-        currentGpxFile = null
-        sessionTimestamp = ""
-        lastFlushedIndex = 0
-        flushSequenceNumber = 0
+        finalizeSession()
         updateNotification()
     }
 
@@ -184,6 +178,11 @@ class TrackingService : Service() {
                     timeMs = location.time,
                     ele = if (location.hasAltitude()) location.altitude else 0.0
                 )
+                val last = lastTrackPoint
+                if (last != null) {
+                    totalDistanceM += haversine(last.lat, last.lon, point.lat, point.lon) * 1000.0
+                }
+                lastTrackPoint = point
                 trackPoints.add(point)
             }
         }
@@ -258,15 +257,8 @@ class TrackingService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        if (isRecording || isRunning) stopServiceFully()
-        handler.removeCallbacks(stopTimer)
-        handler.removeCallbacks(statsUpdater)
-        handler.removeCallbacks(incrementFlusher)
-        if (isRecording) stopRecording()
-        isRunning = false
+        stopServiceFully()
         unregisterPowerReceiver()
-        stopLocationUpdates()
-        releaseWakeLock()
     }
 
     private fun registerPowerReceiver() {
@@ -371,11 +363,12 @@ class TrackingService : Service() {
             currentUpdateRateHz = 0f
             updateRateSum = 0.0
             updateRateCount = 0
+            totalDistanceM = 0.0
+            lastTrackPoint = null
             val timestamp = fileNameFormat.format(Date())
             val dir = getExternalFilesDir(null) ?: filesDir
             currentGpxFile = File(dir, "track_$timestamp.gpx")
             sessionTimestamp = timestamp
-            lastFlushedIndex = 0
             flushSequenceNumber = 0
             IncrementManager.getIncrementDir(dir)
         }
@@ -401,6 +394,7 @@ class TrackingService : Service() {
         isRecording = false
         // isRunning stays true — service remains alive waiting for charger
         pausedAtMs = System.currentTimeMillis()
+        flushIncrement()
         handler.removeCallbacks(stopTimer)
         handler.postDelayed(stopTimer, NO_MOVEMENT_TIMEOUT_MS)
         // statsUpdater keeps running so the UI card continues to update
@@ -422,13 +416,34 @@ class TrackingService : Service() {
         handler.removeCallbacks(statsUpdater)
         handler.removeCallbacks(incrementFlusher)
         stopLocationUpdates()
-        flushIncrement()
-        writeGpxFile()
-        val dir = getExternalFilesDir(null) ?: filesDir
-        IncrementManager.deleteSessionIncrements(dir, sessionTimestamp)
+        finalizeSession()
         releaseWakeLock()
         sendBroadcast(Intent(ACTION_TRACKING_STOPPED).setPackage(packageName))
         updateNotification()
+    }
+
+    /**
+     * Flushes any remaining in-memory points to disk, merges all increment
+     * files into a final GPX, and resets session state.  Safe to call when
+     * there is no active session (all operations are no-ops on empty data).
+     */
+    private fun finalizeSession() {
+        flushIncrement()
+        if (sessionTimestamp.isNotEmpty()) {
+            val dir = getExternalFilesDir(null) ?: filesDir
+            val sessions = IncrementManager.findOrphanedSessions(dir)
+            val files = sessions[sessionTimestamp]
+            if (files != null && files.isNotEmpty()) {
+                IncrementManager.mergeIncrementsToGpx(dir, sessionTimestamp, files)
+            }
+            IncrementManager.deleteSessionIncrements(dir, sessionTimestamp)
+        }
+        trackPoints.clear()
+        currentGpxFile = null
+        sessionTimestamp = ""
+        flushSequenceNumber = 0
+        totalDistanceM = 0.0
+        lastTrackPoint = null
     }
 
     private fun startLocationUpdates() {
@@ -450,35 +465,24 @@ class TrackingService : Service() {
     }
 
     private fun flushIncrement() {
-        val currentSize = trackPoints.size
-        if (currentSize <= lastFlushedIndex) return
+        if (trackPoints.isEmpty()) return
         val dir = getExternalFilesDir(null) ?: filesDir
-        val newPoints = trackPoints.subList(lastFlushedIndex, currentSize).toList()
         val success = IncrementManager.writeIncrement(
             storageDir = dir,
             sessionTimestamp = sessionTimestamp,
             sequenceNumber = flushSequenceNumber,
-            points = newPoints
+            points = trackPoints.toList()
         )
         if (success) {
-            lastFlushedIndex = currentSize
+            trackPoints.clear()
             flushSequenceNumber++
         }
-    }
-
-    private fun writeGpxFile() {
-        val file = currentGpxFile ?: return
-        if (trackPoints.isEmpty()) {
-            file.delete()
-            return
-        }
-        IncrementManager.writeGpxFile(file, trackPoints)
     }
 
     private fun broadcastStats() {
         val now = System.currentTimeMillis()
         val durationMs = if (recordingStartMs > 0) now - recordingStartMs else 0L
-        val distanceM = calculateTrackDistance()
+        val distanceM = totalDistanceM
         val fileName = currentGpxFile?.name ?: ""
         val pauseTimeoutMs = if (!isRecording && pausedAtMs > 0) {
             val remaining = NO_MOVEMENT_TIMEOUT_MS - (now - pausedAtMs)
@@ -502,17 +506,6 @@ class TrackingService : Service() {
             putExtra(EXTRA_AVG_UPDATE_RATE, avgUpdateRate)
         }
         sendBroadcast(intent.setPackage(packageName))
-    }
-
-    private fun calculateTrackDistance(): Double {
-        if (trackPoints.size < 2) return 0.0
-        var total = 0.0
-        for (i in 1 until trackPoints.size) {
-            val p1 = trackPoints[i - 1]
-            val p2 = trackPoints[i]
-            total += haversine(p1.lat, p1.lon, p2.lat, p2.lon)
-        }
-        return total * 1000.0 // convert km to meters
     }
 
     private fun haversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
