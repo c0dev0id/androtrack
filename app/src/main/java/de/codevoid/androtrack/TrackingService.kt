@@ -69,6 +69,7 @@ class TrackingService : Service() {
         private const val NO_MOVEMENT_TIMEOUT_MS = 20 * 60 * 1000L
         private const val DEFAULT_LOCATION_INTERVAL_MS = 1000L
         private const val DEFAULT_LOCATION_MIN_DISTANCE = 1f
+        private const val DEFAULT_MAX_ACCURACY_M = 20f
         private const val STATS_UPDATE_INTERVAL_MS = 1000L
         private const val INCREMENT_FLUSH_INTERVAL_MS = 10_000L
 
@@ -80,6 +81,7 @@ class TrackingService : Service() {
     private var emulatePower = false
     private var locationIntervalMs = DEFAULT_LOCATION_INTERVAL_MS
     private var locationMinDistance = DEFAULT_LOCATION_MIN_DISTANCE
+    private var maxAccuracyM = DEFAULT_MAX_ACCURACY_M
 
     private fun loadPreferences() {
         val prefs = getSharedPreferences("androtrack_settings", Context.MODE_PRIVATE)
@@ -87,6 +89,7 @@ class TrackingService : Service() {
         val intervalSec = prefs.getFloat("pref_update_interval_sec", DEFAULT_LOCATION_INTERVAL_MS / 1000f)
         locationIntervalMs = (intervalSec * 1000).toLong()
         locationMinDistance = prefs.getFloat("pref_min_distance_m", DEFAULT_LOCATION_MIN_DISTANCE)
+        maxAccuracyM = prefs.getFloat("pref_max_accuracy_m", DEFAULT_MAX_ACCURACY_M)
         sensorRecordingEnabled = prefs.getBoolean("pref_sensor_recording", true)
     }
 
@@ -176,6 +179,11 @@ class TrackingService : Service() {
             lastLocationTimeNs = nowNs
 
             if (isRecording) {
+                // Accuracy filter: skip points with accuracy worse than threshold
+                if (maxAccuracyM > 0f && location.hasAccuracy() && location.accuracy > maxAccuracyM) {
+                    return
+                }
+
                 val sensor = bikeSensorManager
                 val point = GpxTrackPoint(
                     lat = location.latitude,

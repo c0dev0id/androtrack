@@ -576,12 +576,15 @@ class RideListActivity : AppCompatActivity() {
         val tvUpdateIntervalValue = dialogView.findViewById<TextView>(R.id.tvUpdateIntervalValue)
         val seekMinDistance = dialogView.findViewById<SeekBar>(R.id.seekMinDistance)
         val tvMinDistanceValue = dialogView.findViewById<TextView>(R.id.tvMinDistanceValue)
+        val seekMaxAccuracy = dialogView.findViewById<SeekBar>(R.id.seekMaxAccuracy)
+        val tvMaxAccuracyValue = dialogView.findViewById<TextView>(R.id.tvMaxAccuracyValue)
 
         // Load current values
         switchEmulatePower.isChecked = prefs.getBoolean("pref_emulate_power", false)
         switchSensorRecording.isChecked = prefs.getBoolean("pref_sensor_recording", true)
         val currentIntervalSec = prefs.getFloat("pref_update_interval_sec", 0.2f)
         val currentMinDistanceM = prefs.getFloat("pref_min_distance_m", 0f)
+        val currentMaxAccuracyM = prefs.getFloat("pref_max_accuracy_m", 20f)
 
         // Map interval (0.1s–10s) to seekbar (0–99)
         val intervalProgress = ((currentIntervalSec - 0.1f) / 9.9f * 99f).toInt().coerceIn(0, 99)
@@ -593,6 +596,11 @@ class RideListActivity : AppCompatActivity() {
         seekMinDistance.progress = distProgress
         tvMinDistanceValue.text = if (currentMinDistanceM == 0f) "Off (no filter)"
             else String.format("%.1f m", currentMinDistanceM)
+
+        // Max accuracy: seekbar 0–100, each tick = 1m, 0 = off
+        seekMaxAccuracy.progress = currentMaxAccuracyM.toInt().coerceIn(0, 100)
+        tvMaxAccuracyValue.text = if (currentMaxAccuracyM == 0f) "Off (no filter)"
+            else String.format("%d m", currentMaxAccuracyM.toInt())
 
         seekUpdateInterval.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
@@ -613,6 +621,15 @@ class RideListActivity : AppCompatActivity() {
             override fun onStopTrackingTouch(seekBar: SeekBar) {}
         })
 
+        seekMaxAccuracy.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                tvMaxAccuracyValue.text = if (progress == 0) "Off (no filter)"
+                    else String.format("%d m", progress)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar) {}
+        })
+
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.settings))
             .setView(dialogView)
@@ -626,6 +643,7 @@ class RideListActivity : AppCompatActivity() {
                     .putBoolean("pref_sensor_recording", switchSensorRecording.isChecked)
                     .putFloat("pref_update_interval_sec", intervalSec)
                     .putFloat("pref_min_distance_m", finalDistanceM)
+                    .putFloat("pref_max_accuracy_m", seekMaxAccuracy.progress.toFloat())
                     .apply()
 
                 if (TrackingService.isRunning) {
