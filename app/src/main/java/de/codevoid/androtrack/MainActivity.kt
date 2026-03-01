@@ -1,4 +1,4 @@
-package com.androtrack
+package de.codevoid.androtrack
 
 import android.content.Intent
 import android.os.Bundle

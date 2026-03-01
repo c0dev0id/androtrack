@@ -1,4 +1,4 @@
-package com.androtrack
+package de.codevoid.androtrack
 
 import android.content.Context
 import android.hardware.Sensor

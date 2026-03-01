@@ -1,4 +1,4 @@
-package com.androtrack
+package de.codevoid.androtrack
 
 import android.Manifest
 import android.content.BroadcastReceiver

@@ -98,7 +98,7 @@
 
     </LinearLayout>
 
-    <com.androtrack.HistogramView
+    <de.codevoid.androtrack.HistogramView
         android:id="@+id/histogramView"
         android:layout_width="match_parent"
         android:layout_height="0dp"

@@ -1,4 +1,4 @@
-package com.androtrack
+package de.codevoid.androtrack
 
 import android.Manifest
 import android.app.Notification
@@ -36,14 +36,14 @@ import kotlin.math.sqrt
 class TrackingService : Service() {
 
     companion object {
-        const val ACTION_START = "com.androtrack.START"
-        const val ACTION_STOP = "com.androtrack.STOP"
-        const val ACTION_TRACKING_STARTED = "com.androtrack.TRACKING_STARTED"
-        const val ACTION_TRACKING_STOPPED = "com.androtrack.TRACKING_STOPPED"
+        const val ACTION_START = "de.codevoid.androtrack.START"
+        const val ACTION_STOP = "de.codevoid.androtrack.STOP"
+        const val ACTION_TRACKING_STARTED = "de.codevoid.androtrack.TRACKING_STARTED"
+        const val ACTION_TRACKING_STOPPED = "de.codevoid.androtrack.TRACKING_STOPPED"
         /** Sent when the charger is disconnected; service stays alive waiting for power to reconnect. */
-        const val ACTION_TRACKING_PAUSED = "com.androtrack.TRACKING_PAUSED"
-        const val ACTION_STATS_UPDATE = "com.androtrack.STATS_UPDATE"
-        const val ACTION_RELOAD_SETTINGS = "com.androtrack.RELOAD_SETTINGS"
+        const val ACTION_TRACKING_PAUSED = "de.codevoid.androtrack.TRACKING_PAUSED"
+        const val ACTION_STATS_UPDATE = "de.codevoid.androtrack.STATS_UPDATE"
+        const val ACTION_RELOAD_SETTINGS = "de.codevoid.androtrack.RELOAD_SETTINGS"
 
         const val EXTRA_DISTANCE_M = "distance_m"
         const val EXTRA_DURATION_MS = "duration_ms"

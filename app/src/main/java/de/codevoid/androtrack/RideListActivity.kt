@@ -1,4 +1,4 @@
-package com.androtrack
+package de.codevoid.androtrack
 
 import android.Manifest
 import android.content.BroadcastReceiver
@@ -26,7 +26,7 @@ import androidx.core.content.ContextCompat
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.androtrack.databinding.ActivityRideListBinding
+import de.codevoid.androtrack.databinding.ActivityRideListBinding
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
