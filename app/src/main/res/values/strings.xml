@@ -40,4 +40,12 @@
     <string name="pref_min_distance_title">Minimum distance</string>
     <string name="pref_sensor_recording_title">Record lean &amp; acceleration</string>
     <string name="pref_sensor_recording_summary">Capture lean angle and acceleration data from motion sensors. Keep bike upright when recording starts.</string>
+    <string name="track_detail">Track Detail</string>
+    <string name="altitude">Altitude</string>
+    <string name="speed">Speed</string>
+    <string name="track_length">Track Length</string>
+    <string name="riding_time">Riding Time</string>
+    <string name="pause_time">Pause Time</string>
+    <string name="avg_speed">Avg Speed</string>
+    <string name="unknown_date">Unknown date</string>
 </resources>
