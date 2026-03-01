@@ -44,7 +44,9 @@ object IncrementManager {
         return try {
             FileWriter(tempFile).use { writer ->
                 for (pt in points) {
-                    writer.write("${pt.lat},${pt.lon},${pt.speed},${pt.timeMs},${pt.ele}\n")
+                    val leanStr = if (pt.leanAngleDeg.isNaN()) "" else "%.2f".format(pt.leanAngleDeg)
+                    val accelStr = if (pt.longitudinalAccelMps2.isNaN()) "" else "%.3f".format(pt.longitudinalAccelMps2)
+                    writer.write("${pt.lat},${pt.lon},${pt.speed},${pt.timeMs},${pt.ele},$leanStr,$accelStr\n")
                 }
                 writer.flush()
             }
@@ -82,12 +84,16 @@ object IncrementManager {
                     reader.forEachLine { line ->
                         val parts = line.split(",")
                         if (parts.size >= 5) {
+                            val lean = if (parts.size > 5) parts[5].toFloatOrNull() ?: Float.NaN else Float.NaN
+                            val accel = if (parts.size > 6) parts[6].toFloatOrNull() ?: Float.NaN else Float.NaN
                             points.add(TrackingService.GpxTrackPoint(
                                 lat = parts[0].toDoubleOrNull() ?: return@forEachLine,
                                 lon = parts[1].toDoubleOrNull() ?: return@forEachLine,
                                 speed = parts[2].toFloatOrNull() ?: 0f,
                                 timeMs = parts[3].toLongOrNull() ?: return@forEachLine,
-                                ele = parts[4].toDoubleOrNull() ?: 0.0
+                                ele = parts[4].toDoubleOrNull() ?: 0.0,
+                                leanAngleDeg = lean,
+                                longitudinalAccelMps2 = accel
                             ))
                         }
                     }
@@ -123,7 +129,7 @@ object IncrementManager {
             FileWriter(file).use { writer ->
                 writer.write("""<?xml version="1.0" encoding="UTF-8"?>""")
                 writer.write("\n")
-                writer.write("""<gpx version="1.1" creator="AndroTrack" xmlns="http://www.topografix.com/GPX/1/1">""")
+                writer.write("""<gpx version="1.1" creator="AndroTrack" xmlns="http://www.topografix.com/GPX/1/1" xmlns:androtrack="http://androtrack.codevoid.de/gpx/1">""")
                 writer.write("\n")
                 writer.write("  <trk>\n")
                 val nameTimestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US)
@@ -136,6 +142,16 @@ object IncrementManager {
                     writer.write("        <ele>${pt.ele}</ele>\n")
                     writer.write("        <time>${isoFormat.format(Date(pt.timeMs))}</time>\n")
                     writer.write("        <speed>${pt.speed}</speed>\n")
+                    if (!pt.leanAngleDeg.isNaN() || !pt.longitudinalAccelMps2.isNaN()) {
+                        writer.write("        <extensions>\n")
+                        if (!pt.leanAngleDeg.isNaN()) {
+                            writer.write("          <androtrack:lean>%.2f</androtrack:lean>\n".format(pt.leanAngleDeg))
+                        }
+                        if (!pt.longitudinalAccelMps2.isNaN()) {
+                            writer.write("          <androtrack:accel>%.3f</androtrack:accel>\n".format(pt.longitudinalAccelMps2))
+                        }
+                        writer.write("        </extensions>\n")
+                    }
                     writer.write("      </trkpt>\n")
                 }
                 writer.write("    </trkseg>\n")
