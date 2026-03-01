@@ -18,7 +18,9 @@ object GpxParser {
         val lon: Double,
         val timeMs: Long,
         val speed: Float,
-        val ele: Double = 0.0
+        val ele: Double = 0.0,
+        val leanAngleDeg: Float = Float.NaN,
+        val longitudinalAccelMps2: Float = Float.NaN
     )
 
     fun parse(file: File): RideItem? {
@@ -81,6 +83,8 @@ object GpxParser {
             var timeMs = 0L
             var speed = 0f
             var ele = 0.0
+            var lean = Float.NaN
+            var accel = Float.NaN
             var inTrkpt = false
             var currentTag = ""
 
@@ -96,6 +100,8 @@ object GpxParser {
                             timeMs = 0L
                             speed = 0f
                             ele = 0.0
+                            lean = Float.NaN
+                            accel = Float.NaN
                         }
                     }
                     XmlPullParser.TEXT -> {
@@ -105,6 +111,8 @@ object GpxParser {
                                 "time" -> timeMs = parseTime(text)
                                 "speed" -> speed = text.toFloatOrNull() ?: 0f
                                 "ele" -> ele = text.toDoubleOrNull() ?: 0.0
+                                "androtrack:lean" -> lean = text.toFloatOrNull() ?: Float.NaN
+                                "androtrack:accel" -> accel = text.toFloatOrNull() ?: Float.NaN
                             }
                         }
                     }
@@ -112,7 +120,7 @@ object GpxParser {
                         if (parser.name == "trkpt" && inTrkpt) {
                             inTrkpt = false
                             if (lat != 0.0 || lon != 0.0) {
-                                points.add(TrackPoint(lat, lon, timeMs, speed, ele))
+                                points.add(TrackPoint(lat, lon, timeMs, speed, ele, lean, accel))
                             }
                         }
                         if (parser.name == currentTag) {

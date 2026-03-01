@@ -284,15 +284,23 @@ class TrackDetailActivity : AppCompatActivity() {
     }
 
     private fun computeLeanAngles(points: List<GpxParser.TrackPoint>): FloatArray {
-        val result = FloatArray(points.size)
+        val hasSensorData = points.any { !it.leanAngleDeg.isNaN() }
+        if (hasSensorData) {
+            return FloatArray(points.size) { i ->
+                val lean = points[i].leanAngleDeg
+                if (lean.isNaN()) 0f else abs(lean)
+            }
+        }
 
+        // Fallback: estimate from GPS trajectory
+        val result = FloatArray(points.size)
         for (i in 1 until points.size - 1) {
             val prev = points[i - 1]
             val curr = points[i]
             val next = points[i + 1]
 
             val speed = curr.speed.toDouble()
-            if (speed < 2.0) continue // skip low speeds to avoid GPS noise
+            if (speed < 2.0) continue
 
             val bearing1 = bearing(prev.lat, prev.lon, curr.lat, curr.lon)
             val bearing2 = bearing(curr.lat, curr.lon, next.lat, next.lon)
@@ -302,7 +310,7 @@ class TrackDetailActivity : AppCompatActivity() {
             while (dBearing < -Math.PI) dBearing += 2 * Math.PI
 
             val absDelta = abs(dBearing)
-            if (absDelta < 0.001) continue // nearly straight
+            if (absDelta < 0.001) continue
 
             val dist = GpxParser.haversine(prev.lat, prev.lon, curr.lat, curr.lon) * 1000.0
             if (dist < 1.0) continue
@@ -312,15 +320,22 @@ class TrackDetailActivity : AppCompatActivity() {
             val leanRad = atan(lateralAccel / GRAVITY)
             result[i] = Math.toDegrees(leanRad).toFloat().coerceAtMost(60f)
         }
-
         return result
     }
 
-    // --- Longitudinal force computation from speed changes ---
+    // --- Longitudinal force computation ---
 
     private fun computeForces(points: List<GpxParser.TrackPoint>): FloatArray {
-        val result = FloatArray(points.size)
+        val hasSensorData = points.any { !it.longitudinalAccelMps2.isNaN() }
+        if (hasSensorData) {
+            return FloatArray(points.size) { i ->
+                val accel = points[i].longitudinalAccelMps2
+                if (accel.isNaN()) 0f else (accel / GRAVITY.toFloat())
+            }
+        }
 
+        // Fallback: estimate from speed changes
+        val result = FloatArray(points.size)
         for (i in 1 until points.size) {
             val dtMs = points[i].timeMs - points[i - 1].timeMs
             if (dtMs <= 0 || dtMs > 60000) continue
@@ -329,7 +344,6 @@ class TrackDetailActivity : AppCompatActivity() {
             val dv = (points[i].speed - points[i - 1].speed).toDouble()
             result[i] = (dv / dtSec / GRAVITY).toFloat()
         }
-
         return result
     }
 
