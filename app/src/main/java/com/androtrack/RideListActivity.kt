@@ -40,6 +40,17 @@ class RideListActivity : AppCompatActivity() {
     private var actionMode: ActionMode? = null
     private var isTracking = false
 
+    /**
+     * Receives three distinct tracking lifecycle broadcasts:
+     * - ACTION_TRACKING_STARTED: GPS recording began (new file opened). Show the card.
+     * - ACTION_TRACKING_PAUSED: No-motion timeout fired; GPS stopped, file finalised,
+     *   but the service is still alive waiting for motion. Keep the card visible so
+     *   the user can see the paused state; reload the ride list because a new GPX file
+     *   was just written.  The statsUpdater continues broadcasting ACTION_STATS_UPDATE
+     *   every second so the card keeps updating.
+     * - ACTION_TRACKING_STOPPED: User pressed Stop (full stop). Hide the card and
+     *   reload the ride list.
+     */
     private val trackingReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
@@ -47,6 +58,12 @@ class RideListActivity : AppCompatActivity() {
                     isTracking = true
                     updateFab()
                     binding.statsCard.visibility = View.VISIBLE
+                }
+                TrackingService.ACTION_TRACKING_PAUSED -> {
+                    isTracking = false
+                    updateFab()
+                    // Card stays visible — service is still running, statsUpdater keeps ticking
+                    loadRides()
                 }
                 TrackingService.ACTION_TRACKING_STOPPED -> {
                     isTracking = false
@@ -154,6 +171,7 @@ class RideListActivity : AppCompatActivity() {
         super.onResume()
         val filter = IntentFilter().apply {
             addAction(TrackingService.ACTION_TRACKING_STARTED)
+            addAction(TrackingService.ACTION_TRACKING_PAUSED)
             addAction(TrackingService.ACTION_TRACKING_STOPPED)
             addAction(TrackingService.ACTION_STATS_UPDATE)
         }
@@ -173,6 +191,7 @@ class RideListActivity : AppCompatActivity() {
         if (isTracking) {
             binding.statsCard.visibility = View.VISIBLE
         }
+        loadRides()
     }
 
     override fun onPause() {
@@ -251,12 +270,24 @@ class RideListActivity : AppCompatActivity() {
         binding.fab.contentDescription = if (isTracking) "Stop tracking" else "Start tracking"
     }
 
+    /**
+     * Updates all fields of the stats card from an ACTION_STATS_UPDATE broadcast.
+     *
+     * Three always-visible rows show the auto-pause state at a glance:
+     * - tvStatsAutoPause: countdown to auto-pause while recording, or how long paused so far.
+     * - tvStatsLastMotion: seconds/minutes since the last detected motion event.
+     * - tvStatsReason: what triggered the current state and what will trigger the next change.
+     */
     private fun updateStatsPanel(intent: Intent) {
         val distanceM = intent.getDoubleExtra(TrackingService.EXTRA_DISTANCE_M, 0.0)
         val durationMs = intent.getLongExtra(TrackingService.EXTRA_DURATION_MS, 0L)
         val recording = intent.getBooleanExtra(TrackingService.EXTRA_IS_RECORDING, false)
         val fileName = intent.getStringExtra(TrackingService.EXTRA_FILE_NAME) ?: ""
         val pauseTimeoutMs = intent.getLongExtra(TrackingService.EXTRA_PAUSE_TIMEOUT_MS, 0L)
+        val timeoutS = intent.getLongExtra(TrackingService.EXTRA_PAUSE_TIMEOUT_SETTING_S, 1200L)
+        val lastMotionAgoMs = intent.getLongExtra(TrackingService.EXTRA_LAST_MOTION_AGO_MS, -1L)
+        val pausedForMs = intent.getLongExtra(TrackingService.EXTRA_PAUSED_FOR_MS, 0L)
+        val startReason = intent.getStringExtra(TrackingService.EXTRA_START_REASON) ?: "service_start"
         val curAccuracy = intent.getFloatExtra(TrackingService.EXTRA_CURRENT_ACCURACY, 0f)
         val avgAccuracy = intent.getFloatExtra(TrackingService.EXTRA_AVG_ACCURACY, 0f)
         val curRate = intent.getFloatExtra(TrackingService.EXTRA_CURRENT_UPDATE_RATE, 0f)
@@ -273,11 +304,25 @@ class RideListActivity : AppCompatActivity() {
         binding.tvStatsDistance.text = String.format("Distance: %.2f km", distanceM / 1000.0)
         binding.tvStatsDuration.text = "Time: ${formatDuration(durationMs)}"
 
-        if (!recording && pauseTimeoutMs > 0) {
-            binding.tvStatsPauseTimeout.visibility = View.VISIBLE
-            binding.tvStatsPauseTimeout.text = "New file in: ${formatDuration(pauseTimeoutMs)}"
+        // Auto-pause row: countdown while recording; elapsed pause time when stopped
+        binding.tvStatsAutoPause.text = if (recording) {
+            "Auto-pause in: ${formatDuration(pauseTimeoutMs)} (${timeoutS}s no-motion timeout)"
         } else {
-            binding.tvStatsPauseTimeout.visibility = View.GONE
+            "Auto-paused: no motion for ${timeoutS}s. Paused for ${formatDuration(pausedForMs)}"
+        }
+
+        // Last motion row
+        binding.tvStatsLastMotion.text = if (lastMotionAgoMs >= 0) {
+            "Last motion: ${formatDuration(lastMotionAgoMs)} ago"
+        } else {
+            "Last motion: —"
+        }
+
+        // Reason row
+        binding.tvStatsReason.text = if (recording) {
+            "Started: ${startReason.replace('_', ' ')}"
+        } else {
+            "Resumes: when motion detected"
         }
 
         binding.tvStatsAccuracy.text = String.format("Accuracy: %.1fm", curAccuracy)
@@ -286,6 +331,13 @@ class RideListActivity : AppCompatActivity() {
         binding.tvStatsAvgUpdateRate.text = String.format("Avg: %.1f Hz", avgRate)
     }
 
+    /**
+     * Scans the app's external files directory for *.gpx files and refreshes the list.
+     * There is no file-system watcher; this is called explicitly on:
+     * - ACTION_TRACKING_PAUSED (a new GPX file was just finalised),
+     * - ACTION_TRACKING_STOPPED (full stop),
+     * - the manual Refresh menu action.
+     */
     private fun loadRides() {
         val dir = getExternalFilesDir(null) ?: filesDir
         val gpxFiles = dir.listFiles { f -> f.name.endsWith(".gpx") }
