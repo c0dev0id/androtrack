@@ -29,4 +29,5 @@
     <string name="tracks_deleted">%1$d track(s) deleted</string>
     <string name="share_failed">Unable to share track</string>
     <string name="buy_me_a_coffee">☕</string>
+    <string name="location_permission_required">Location permission is required for tracking.</string>
 </resources>

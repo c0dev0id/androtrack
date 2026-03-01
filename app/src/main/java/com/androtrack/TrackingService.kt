@@ -1,5 +1,6 @@
 package com.androtrack
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,8 +8,10 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.hardware.Sensor
+import androidx.core.content.ContextCompat
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
@@ -173,6 +176,10 @@ class TrackingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
+                if (!hasLocationPermission()) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 startForegroundWithNotification()
                 if (!isRecording) startRecording()
             }
@@ -181,6 +188,10 @@ class TrackingService : Service() {
                 stopSelf()
             }
             else -> {
+                if (!hasLocationPermission()) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 startForegroundWithNotification()
             }
         }
@@ -201,12 +212,20 @@ class TrackingService : Service() {
     }
 
     private fun startForegroundWithNotification() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        } else {
-            startForeground(NOTIFICATION_ID, buildNotification())
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            } else {
+                startForeground(NOTIFICATION_ID, buildNotification())
+            }
+        } catch (e: SecurityException) {
+            stopSelf()
         }
     }
+
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
     private fun buildNotification(): Notification {
         val pendingIntent = PendingIntent.getActivity(
