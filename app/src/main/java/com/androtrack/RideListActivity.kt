@@ -172,6 +172,7 @@ class RideListActivity : AppCompatActivity() {
         if (isTracking) {
             binding.statsCard.visibility = View.VISIBLE
         }
+        loadRides()
     }
 
     override fun onPause() {
