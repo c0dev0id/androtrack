@@ -67,8 +67,8 @@ class TrackingService : Service() {
          * If power reconnects before this timer fires, recording resumes into the same file.
          */
         private const val NO_MOVEMENT_TIMEOUT_MS = 20 * 60 * 1000L
-        private const val DEFAULT_LOCATION_INTERVAL_MS = 200L
-        private const val DEFAULT_LOCATION_MIN_DISTANCE = 0f
+        private const val DEFAULT_LOCATION_INTERVAL_MS = 1000L
+        private const val DEFAULT_LOCATION_MIN_DISTANCE = 1f
         private const val STATS_UPDATE_INTERVAL_MS = 1000L
         private const val INCREMENT_FLUSH_INTERVAL_MS = 10_000L
 
@@ -222,7 +222,10 @@ class TrackingService : Service() {
                     return START_NOT_STICKY
                 }
                 if (!startForegroundWithNotification()) return START_NOT_STICKY
-                if (!isRecording && (isCharging() || emulatePower)) startRecording()
+                if (!isRecording) {
+                    startRecording()
+                    if (!isCharging() && !emulatePower) stopRecording()
+                }
             }
             ACTION_STOP -> {
                 stopServiceFully()
