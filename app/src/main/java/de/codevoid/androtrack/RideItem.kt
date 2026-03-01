@@ -1,4 +1,4 @@
-package com.androtrack
+package de.codevoid.androtrack
 
 data class RideItem(
     val file: java.io.File,

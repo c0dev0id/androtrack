@@ -1,10 +1,10 @@
-package com.androtrack
+package de.codevoid.androtrack
 
 import android.graphics.Color
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
-import com.androtrack.databinding.ActivityTrackDetailBinding
+import de.codevoid.androtrack.databinding.ActivityTrackDetailBinding
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
