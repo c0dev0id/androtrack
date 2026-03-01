@@ -10,6 +10,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
@@ -253,10 +255,27 @@ class RideListActivity : AppCompatActivity() {
             checkAndRequestPermissions()
             return
         }
+        if (!isIgnoringBatteryOptimizations()) {
+            requestBatteryOptimizationExemption()
+        }
+
         val intent = Intent(this, TrackingService::class.java).apply {
             action = TrackingService.ACTION_START
         }
         ContextCompat.startForegroundService(this, intent)
+    }
+
+    private fun isIgnoringBatteryOptimizations(): Boolean {
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        return pm.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    private fun requestBatteryOptimizationExemption() {
+        val intent = Intent(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            Uri.parse("package:$packageName")
+        )
+        startActivity(intent)
     }
 
     private fun stopTrackingService() {
@@ -578,6 +597,20 @@ class RideListActivity : AppCompatActivity() {
         val tvMinDistanceValue = dialogView.findViewById<TextView>(R.id.tvMinDistanceValue)
         val seekMaxAccuracy = dialogView.findViewById<SeekBar>(R.id.seekMaxAccuracy)
         val tvMaxAccuracyValue = dialogView.findViewById<TextView>(R.id.tvMaxAccuracyValue)
+        val batteryOptRow = dialogView.findViewById<View>(R.id.batteryOptRow)
+        val tvBatteryOptStatus = dialogView.findViewById<TextView>(R.id.tvBatteryOptStatus)
+
+        // Battery optimization status
+        if (isIgnoringBatteryOptimizations()) {
+            tvBatteryOptStatus.text = getString(R.string.pref_battery_opt_disabled)
+        } else {
+            tvBatteryOptStatus.text = getString(R.string.pref_battery_opt_enabled)
+        }
+        batteryOptRow.setOnClickListener {
+            if (!isIgnoringBatteryOptimizations()) {
+                requestBatteryOptimizationExemption()
+            }
+        }
 
         // Load current values
         switchEmulatePower.isChecked = prefs.getBoolean("pref_emulate_power", false)

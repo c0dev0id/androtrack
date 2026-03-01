@@ -182,6 +182,39 @@
 
         </LinearLayout>
 
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginVertical="12dp"
+            android:background="?android:dividerHorizontal" />
+
+        <!-- Battery optimization -->
+        <LinearLayout
+            android:id="@+id/batteryOptRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground"
+            android:padding="4dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/pref_battery_opt_title"
+                android:textAppearance="?attr/textAppearanceBody1" />
+
+            <TextView
+                android:id="@+id/tvBatteryOptStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAppearance="?attr/textAppearanceCaption"
+                android:textColor="?android:textColorSecondary" />
+
+        </LinearLayout>
+
     </LinearLayout>
 
 </ScrollView>
