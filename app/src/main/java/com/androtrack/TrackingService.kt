@@ -180,7 +180,7 @@ class TrackingService : Service() {
                     stopSelf()
                     return START_NOT_STICKY
                 }
-                startForegroundWithNotification()
+                if (!startForegroundWithNotification()) return START_NOT_STICKY
                 if (!isRecording) startRecording()
             }
             ACTION_STOP -> {
@@ -192,7 +192,7 @@ class TrackingService : Service() {
                     stopSelf()
                     return START_NOT_STICKY
                 }
-                startForegroundWithNotification()
+                if (!startForegroundWithNotification()) return START_NOT_STICKY
             }
         }
         return START_STICKY
@@ -211,15 +211,17 @@ class TrackingService : Service() {
         releaseWakeLock()
     }
 
-    private fun startForegroundWithNotification() {
-        try {
+    private fun startForegroundWithNotification(): Boolean {
+        return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
             } else {
                 startForeground(NOTIFICATION_ID, buildNotification())
             }
+            true
         } catch (e: SecurityException) {
             stopSelf()
+            false
         }
     }
 
@@ -258,7 +260,7 @@ class TrackingService : Service() {
             setShowBadge(false)
         }
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(channel)
+        nm?.createNotificationChannel(channel)
     }
 
     private fun registerMotionSensor() {
@@ -413,12 +415,12 @@ class TrackingService : Service() {
 
     private fun updateNotification() {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.notify(NOTIFICATION_ID, buildNotification())
+        nm?.notify(NOTIFICATION_ID, buildNotification())
     }
 
     private fun acquireWakeLock() {
         if (wakeLock?.isHeld == true) return
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AndroTrack::TrackingWakeLock")
         wakeLock?.acquire(NO_MOVEMENT_TIMEOUT_MS + 60_000L)
     }
