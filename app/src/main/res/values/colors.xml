@@ -1,14 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="colorPrimary">#1565C0</color>
-    <color name="colorPrimaryDark">#0D47A1</color>
-    <color name="colorAccent">#FF6D00</color>
+    <!-- Primary brand colors (androsnd orange scheme) -->
+    <color name="colorPrimary">#F57C00</color>
+    <color name="colorPrimaryDark">#E65100</color>
+    <color name="colorAccent">#F57C00</color>
     <color name="colorOnPrimary">#FFFFFF</color>
-    <color name="text_primary">#212121</color>
-    <color name="text_secondary">#757575</color>
-    <color name="selection_highlight">#BBDEFB</color>
+
+    <!-- Text colors -->
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B0B0B0</color>
+    <color name="text_tertiary">#808080</color>
+
+    <!-- Surface/background colors -->
+    <color name="surface_dark">#2B2B2B</color>
+    <color name="surface_card">#3C3C3C</color>
+    <color name="bottom_bar_bg">#1A1A1A</color>
+    <color name="preview_background">#2B2B2B</color>
+
+    <!-- Selection -->
+    <color name="selection_highlight">#4D3400</color>
+
+    <!-- Functional / data visualization (do not change) -->
     <color name="track_line">#E53935</color>
     <color name="track_start">#43A047</color>
     <color name="track_end">#E53935</color>
-    <color name="preview_background">#F5F5F5</color>
+
+    <!-- Semantic -->
+    <color name="destructive">#D32F2F</color>
 </resources>
