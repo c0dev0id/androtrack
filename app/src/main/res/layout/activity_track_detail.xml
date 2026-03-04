@@ -19,6 +19,7 @@
             android:background="?attr/colorPrimary"
             android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
             app:navigationIcon="?attr/homeAsUpIndicator"
+            app:navigationContentDescription="@string/navigate_up"
             app:popupTheme="@style/ThemeOverlay.AppCompat.Light" />
 
     </com.google.android.material.appbar.AppBarLayout>
@@ -27,7 +28,8 @@
         android:id="@+id/mapView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="5" />
+        android:layout_weight="5"
+        android:contentDescription="@string/track_map" />
 
     <LinearLayout
         android:layout_width="match_parent"

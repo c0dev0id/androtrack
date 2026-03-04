@@ -55,6 +55,9 @@
     <string name="max_lean">Max Lean</string>
     <string name="max_accel">Max Accel</string>
     <string name="max_brake">Max Brake</string>
+    <string name="navigate_up">Navigate up</string>
+    <string name="track_map">Track map</string>
+    <string name="track_preview">Track preview thumbnail</string>
     <string name="pref_battery_opt_title">Battery optimization</string>
     <string name="pref_battery_opt_disabled">Unrestricted (recommended)</string>
     <string name="pref_battery_opt_enabled">Optimized — tap to change</string>

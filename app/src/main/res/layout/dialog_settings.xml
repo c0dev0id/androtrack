@@ -10,7 +10,7 @@
         android:orientation="vertical"
         android:paddingHorizontal="24dp"
         android:paddingTop="16dp"
-        android:paddingBottom="8dp">
+        android:paddingBottom="16dp">
 
         <!-- Emulate power on -->
         <LinearLayout
@@ -40,7 +40,7 @@
 
             </LinearLayout>
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/switchEmulatePower"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -74,6 +74,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
+            android:minHeight="48dp"
             android:max="99" />
 
         <!-- Divider -->
@@ -102,6 +103,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
+            android:minHeight="48dp"
             android:max="99" />
 
         <!-- Divider -->
@@ -137,6 +139,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
+            android:minHeight="48dp"
             android:max="100" />
 
         <!-- Divider -->
@@ -174,7 +177,7 @@
 
             </LinearLayout>
 
-            <androidx.appcompat.widget.SwitchCompat
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/switchSensorRecording"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -198,7 +201,8 @@
             android:clickable="true"
             android:focusable="true"
             android:background="?attr/selectableItemBackground"
-            android:padding="4dp">
+            android:contentDescription="@string/pref_battery_opt_title"
+            android:padding="8dp">
 
             <TextView
                 android:layout_width="wrap_content"

@@ -58,7 +58,7 @@ class HistogramView @JvmOverloads constructor(
     }
 
     private val bgPaint = Paint().apply {
-        color = Color.parseColor("#F5F5F5")
+        color = context.getColor(R.color.preview_background)
         style = Paint.Style.FILL
     }
 
