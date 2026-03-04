@@ -187,11 +187,7 @@ class RideListActivity : AppCompatActivity() {
             addAction(TrackingService.ACTION_TRACKING_STOPPED)
             addAction(TrackingService.ACTION_STATS_UPDATE)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(trackingReceiver, filter, RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(trackingReceiver, filter)
-        }
+        ContextCompat.registerReceiver(this, trackingReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         isTracking = TrackingService.isRunning
         if (isTracking &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
