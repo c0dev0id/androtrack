@@ -25,7 +25,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.appcompat.widget.SwitchCompat
+import com.google.android.material.materialswitch.MaterialSwitch
 import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import de.codevoid.androtrack.databinding.ActivityRideListBinding
@@ -599,8 +599,8 @@ class RideListActivity : AppCompatActivity() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_settings, null)
         val prefs = getSharedPreferences("androtrack_settings", Context.MODE_PRIVATE)
 
-        val switchEmulatePower = dialogView.findViewById<SwitchCompat>(R.id.switchEmulatePower)
-        val switchSensorRecording = dialogView.findViewById<SwitchCompat>(R.id.switchSensorRecording)
+        val switchEmulatePower = dialogView.findViewById<MaterialSwitch>(R.id.switchEmulatePower)
+        val switchSensorRecording = dialogView.findViewById<MaterialSwitch>(R.id.switchSensorRecording)
         val seekUpdateInterval = dialogView.findViewById<SeekBar>(R.id.seekUpdateInterval)
         val tvUpdateIntervalValue = dialogView.findViewById<TextView>(R.id.tvUpdateIntervalValue)
         val seekMinDistance = dialogView.findViewById<SeekBar>(R.id.seekMinDistance)
