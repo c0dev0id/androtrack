@@ -541,12 +541,23 @@ class RideListActivity : AppCompatActivity() {
             return
         }
 
+        AlertDialog.Builder(this)
+            .setTitle("Merge ${selected.size} rides?")
+            .setMessage("The original files will be deleted after merging.")
+            .setPositiveButton("Merge") { _, _ -> performMerge(selected) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun performMerge(selected: List<RideItem>) {
+        // Sort chronologically so Track 1 is always the oldest ride
+        val sorted = selected.sortedWith(compareBy({ it.date }, { it.startTime }))
         try {
             val outputDir = getExternalFilesDir(null) ?: filesDir
-            val merged = GpxMerger.merge(selected.map { it.file }, outputDir)
+            val merged = GpxMerger.merge(sorted.map { it.file }, outputDir)
             if (merged != null) {
                 // Delete source track files after successful merge
-                for (ride in selected) {
+                for (ride in sorted) {
                     ride.file.delete()
                 }
                 Toast.makeText(this, "Merged: ${merged.name}", Toast.LENGTH_LONG).show()

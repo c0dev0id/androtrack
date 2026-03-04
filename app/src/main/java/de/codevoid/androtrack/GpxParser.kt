@@ -25,14 +25,24 @@ object GpxParser {
 
     fun parse(file: File): RideItem? {
         return try {
-            val points = parsePointsInternal(file)
-            if (points.isEmpty()) return null
+            val segments = parseSegmentsInternal(file)
+            val allPoints = segments.flatten()
+            if (allPoints.isEmpty()) return null
 
-            val startMs = points.first().timeMs
-            val endMs = points.last().timeMs
-            val durationMs = if (endMs > startMs) endMs - startMs else 0L
+            val startMs = allPoints.first().timeMs
 
-            val distanceKm = calculateDistance(points)
+            // Sum per-segment durations to exclude gaps between merged tracks
+            val durationMs = segments.sumOf { seg ->
+                if (seg.size < 2) 0L
+                else {
+                    val first = seg.first().timeMs
+                    val last = seg.last().timeMs
+                    if (last > first) last - first else 0L
+                }
+            }
+
+            // Sum per-segment distances to avoid counting jumps between merged tracks
+            val distanceKm = segments.sumOf { calculateDistance(it) }
 
             val startDate = if (startMs > 0) {
                 val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -48,7 +58,7 @@ object GpxParser {
                 extractTimeFromFilename(file.name)
             }
 
-            val trackPairs = points.map { Pair(it.lat, it.lon) }
+            val trackPairs = allPoints.map { Pair(it.lat, it.lon) }
 
             RideItem(
                 file = file,
@@ -65,15 +75,17 @@ object GpxParser {
 
     fun parseTrackPoints(file: File): List<TrackPoint>? {
         return try {
-            val points = parsePointsInternal(file)
+            val points = parseSegmentsInternal(file).flatten()
             if (points.isEmpty()) null else points
         } catch (e: Exception) {
             null
         }
     }
 
-    private fun parsePointsInternal(file: File): List<TrackPoint> {
-        val points = mutableListOf<TrackPoint>()
+    private fun parseSegmentsInternal(file: File): List<List<TrackPoint>> {
+        val segments = mutableListOf<MutableList<TrackPoint>>()
+        var currentSegment: MutableList<TrackPoint>? = null
+        val orphanPoints = mutableListOf<TrackPoint>()
         FileInputStream(file).use { fis ->
             val parser = Xml.newPullParser()
             parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
@@ -93,15 +105,18 @@ object GpxParser {
                 when (eventType) {
                     XmlPullParser.START_TAG -> {
                         currentTag = parser.name
-                        if (currentTag == "trkpt") {
-                            inTrkpt = true
-                            lat = parser.getAttributeValue(null, "lat")?.toDoubleOrNull() ?: 0.0
-                            lon = parser.getAttributeValue(null, "lon")?.toDoubleOrNull() ?: 0.0
-                            timeMs = 0L
-                            speed = 0f
-                            ele = 0.0
-                            lean = Float.NaN
-                            accel = Float.NaN
+                        when (currentTag) {
+                            "trk" -> currentSegment = mutableListOf()
+                            "trkpt" -> {
+                                inTrkpt = true
+                                lat = parser.getAttributeValue(null, "lat")?.toDoubleOrNull() ?: 0.0
+                                lon = parser.getAttributeValue(null, "lon")?.toDoubleOrNull() ?: 0.0
+                                timeMs = 0L
+                                speed = 0f
+                                ele = 0.0
+                                lean = Float.NaN
+                                accel = Float.NaN
+                            }
                         }
                     }
                     XmlPullParser.TEXT -> {
@@ -117,10 +132,19 @@ object GpxParser {
                         }
                     }
                     XmlPullParser.END_TAG -> {
-                        if (parser.name == "trkpt" && inTrkpt) {
-                            inTrkpt = false
-                            if (lat != 0.0 || lon != 0.0) {
-                                points.add(TrackPoint(lat, lon, timeMs, speed, ele, lean, accel))
+                        when (parser.name) {
+                            "trk" -> {
+                                currentSegment?.let { if (it.isNotEmpty()) segments.add(it) }
+                                currentSegment = null
+                            }
+                            "trkpt" -> {
+                                if (inTrkpt) {
+                                    inTrkpt = false
+                                    if (lat != 0.0 || lon != 0.0) {
+                                        val pt = TrackPoint(lat, lon, timeMs, speed, ele, lean, accel)
+                                        currentSegment?.add(pt) ?: orphanPoints.add(pt)
+                                    }
+                                }
                             }
                         }
                         if (parser.name == currentTag) {
@@ -131,7 +155,8 @@ object GpxParser {
                 eventType = parser.next()
             }
         }
-        return points
+        if (orphanPoints.isNotEmpty()) segments.add(0, orphanPoints)
+        return segments
     }
 
     private fun parseTime(text: String): Long {

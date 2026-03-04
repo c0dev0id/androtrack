@@ -28,7 +28,9 @@ object GpxMerger {
     fun merge(files: List<File>, outputDir: File): File? {
         if (files.isEmpty()) return null
 
-        val fileTracks = files.mapNotNull { file -> parsePoints(file).takeIf { it.isNotEmpty() } }
+        val fileTracks = files.mapNotNull { file ->
+            parsePoints(file).takeIf { it.isNotEmpty() }?.let { Pair(file, it) }
+        }
 
         if (fileTracks.isEmpty()) return null
 
@@ -41,10 +43,10 @@ object GpxMerger {
             writer.write("""<gpx version="1.1" creator="AndroTrack" xmlns="http://www.topografix.com/GPX/1/1" xmlns:androtrack="http://androtrack.codevoid.de/gpx/1">""")
             writer.newLine()
 
-            for ((index, points) in fileTracks.withIndex()) {
+            for ((file, points) in fileTracks) {
                 writer.write("  <trk>")
                 writer.newLine()
-                writer.write("    <name>Track ${index + 1}</name>")
+                writer.write("    <name>${trackNameFromFile(file)}</name>")
                 writer.newLine()
                 writer.write("    <trkseg>")
                 writer.newLine()
@@ -174,5 +176,11 @@ object GpxMerger {
         } catch (e: Exception) {
             try { isoFormat.parse(text)?.time ?: 0L } catch (e2: Exception) { 0L }
         }
+    }
+
+    private fun trackNameFromFile(file: File): String {
+        val regex = Regex("""(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})""")
+        val m = regex.find(file.nameWithoutExtension) ?: return file.nameWithoutExtension
+        return "${m.groupValues[1]} ${m.groupValues[2]}:${m.groupValues[3]}"
     }
 }
