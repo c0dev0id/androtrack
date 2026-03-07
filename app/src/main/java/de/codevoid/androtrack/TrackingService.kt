@@ -379,7 +379,7 @@ class TrackingService : Service() {
     private fun buildNotification(): Notification {
         val pendingIntent = PendingIntent.getActivity(
             this, 0,
-            Intent(this, RideListActivity::class.java),
+            Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE
         )
         val stopIntent = PendingIntent.getService(

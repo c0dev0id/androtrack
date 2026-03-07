@@ -27,7 +27,7 @@
         android:theme="@style/Theme.AndroTrack">
 
         <activity
-            android:name=".RideListActivity"
+            android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.AndroTrack">
@@ -36,12 +36,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".TrackDetailActivity"
-            android:exported="false"
-            android:label="@string/track_detail"
-            android:theme="@style/Theme.AndroTrack" />
 
         <service
             android:name=".TrackingService"
