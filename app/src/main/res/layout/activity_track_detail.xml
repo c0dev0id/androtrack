@@ -76,6 +76,13 @@
                 android:text="@string/force"
                 style="@style/Widget.MaterialComponents.Chip.Choice" />
 
+            <com.google.android.material.chip.Chip
+                android:id="@+id/chipSignal"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/signal"
+                style="@style/Widget.MaterialComponents.Chip.Choice" />
+
         </com.google.android.material.chip.ChipGroup>
 
         <View
@@ -326,6 +333,60 @@
                         android:textAppearance="?attr/textAppearanceBody1"
                         android:textColor="@color/text_primary"
                         tools:text="0.65 G" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowSignalStats"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/max_signal"
+                        android:textAppearance="?attr/textAppearanceCaption"
+                        android:textColor="@color/text_secondary" />
+
+                    <TextView
+                        android:id="@+id/tvDetailMaxSignal"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?attr/textAppearanceBody1"
+                        android:textColor="@color/text_primary" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/min_signal"
+                        android:textAppearance="?attr/textAppearanceCaption"
+                        android:textColor="@color/text_secondary" />
+
+                    <TextView
+                        android:id="@+id/tvDetailMinSignal"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="?attr/textAppearanceBody1"
+                        android:textColor="@color/text_primary" />
 
                 </LinearLayout>
 

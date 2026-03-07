@@ -22,6 +22,9 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.telephony.PhoneStateListener
+import android.telephony.SignalStrength
+import android.telephony.TelephonyManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import java.io.File
@@ -101,13 +104,56 @@ class TrackingService : Service() {
         val timeMs: Long,
         val ele: Double = 0.0,
         val leanAngleDeg: Float = Float.NaN,
-        val longitudinalAccelMps2: Float = Float.NaN
+        val longitudinalAccelMps2: Float = Float.NaN,
+        val signalDbm: Int = Int.MIN_VALUE
     )
 
     private var locationManager: LocationManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var bikeSensorManager: BikeSensorManager? = null
     private var sensorRecordingEnabled = true
+    private var telephonyManager: TelephonyManager? = null
+    private var currentSignalDbm: Int = Int.MIN_VALUE
+
+    @Suppress("DEPRECATION")
+    private val phoneStateListener = object : PhoneStateListener() {
+        override fun onSignalStrengthsChanged(signalStrength: SignalStrength) {
+            currentSignalDbm = readDbm(signalStrength)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun readDbm(ss: SignalStrength): Int {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ss.cellSignalStrengths
+                .filter { it.dbm != Int.MIN_VALUE }
+                .maxByOrNull { it.dbm }?.dbm ?: Int.MIN_VALUE
+        } else {
+            when (ss.level) {
+                0 -> -120
+                1 -> -107
+                2 -> -97
+                3 -> -85
+                4 -> -65
+                else -> Int.MIN_VALUE
+            }
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun startSignalListener() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
+                != PackageManager.PERMISSION_GRANTED) return
+        telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+        telephonyManager?.listen(phoneStateListener, PhoneStateListener.LISTEN_SIGNAL_STRENGTHS)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun stopSignalListener() {
+        telephonyManager?.listen(phoneStateListener, PhoneStateListener.LISTEN_NONE)
+        telephonyManager = null
+        currentSignalDbm = Int.MIN_VALUE
+    }
 
     private val trackPoints = mutableListOf<GpxTrackPoint>()
     private var currentGpxFile: File? = null
@@ -193,7 +239,8 @@ class TrackingService : Service() {
                     timeMs = location.time,
                     ele = if (location.hasAltitude()) location.altitude else 0.0,
                     leanAngleDeg = if (sensor?.isActive == true) sensor.leanAngleDeg else Float.NaN,
-                    longitudinalAccelMps2 = if (sensor?.isActive == true) sensor.longitudinalAccel else Float.NaN
+                    longitudinalAccelMps2 = if (sensor?.isActive == true) sensor.longitudinalAccel else Float.NaN,
+                    signalDbm = currentSignalDbm
                 )
                 val last = lastTrackPoint
                 if (last != null) {
@@ -406,6 +453,7 @@ class TrackingService : Service() {
             bikeSensorManager = BikeSensorManager(this)
             bikeSensorManager?.start()
         }
+        if (isFreshStart) startSignalListener()
         startLocationUpdates()
         handler.removeCallbacks(statsUpdater)
         handler.post(statsUpdater)
@@ -433,6 +481,7 @@ class TrackingService : Service() {
         stopLocationUpdates()
         bikeSensorManager?.stop()
         bikeSensorManager = null
+        stopSignalListener()
         releaseWakeLock()
         sendBroadcast(Intent(ACTION_TRACKING_PAUSED).setPackage(packageName))
         updateNotification()
@@ -452,6 +501,7 @@ class TrackingService : Service() {
         stopLocationUpdates()
         bikeSensorManager?.stop()
         bikeSensorManager = null
+        stopSignalListener()
         finalizeSession()
         releaseWakeLock()
         sendBroadcast(Intent(ACTION_TRACKING_STOPPED).setPackage(packageName))

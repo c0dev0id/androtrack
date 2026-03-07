@@ -46,7 +46,8 @@ object IncrementManager {
                 for (pt in points) {
                     val leanStr = if (pt.leanAngleDeg.isNaN()) "" else "%.2f".format(pt.leanAngleDeg)
                     val accelStr = if (pt.longitudinalAccelMps2.isNaN()) "" else "%.3f".format(pt.longitudinalAccelMps2)
-                    writer.write("${pt.lat},${pt.lon},${pt.speed},${pt.timeMs},${pt.ele},$leanStr,$accelStr\n")
+                    val signalStr = if (pt.signalDbm == Int.MIN_VALUE) "" else pt.signalDbm.toString()
+                    writer.write("${pt.lat},${pt.lon},${pt.speed},${pt.timeMs},${pt.ele},$leanStr,$accelStr,$signalStr\n")
                 }
                 writer.flush()
             }
@@ -86,6 +87,7 @@ object IncrementManager {
                         if (parts.size >= 5) {
                             val lean = if (parts.size > 5) parts[5].toFloatOrNull() ?: Float.NaN else Float.NaN
                             val accel = if (parts.size > 6) parts[6].toFloatOrNull() ?: Float.NaN else Float.NaN
+                            val signal = if (parts.size > 7) parts[7].toIntOrNull() ?: Int.MIN_VALUE else Int.MIN_VALUE
                             points.add(TrackingService.GpxTrackPoint(
                                 lat = parts[0].toDoubleOrNull() ?: return@forEachLine,
                                 lon = parts[1].toDoubleOrNull() ?: return@forEachLine,
@@ -93,7 +95,8 @@ object IncrementManager {
                                 timeMs = parts[3].toLongOrNull() ?: return@forEachLine,
                                 ele = parts[4].toDoubleOrNull() ?: 0.0,
                                 leanAngleDeg = lean,
-                                longitudinalAccelMps2 = accel
+                                longitudinalAccelMps2 = accel,
+                                signalDbm = signal
                             ))
                         }
                     }
@@ -142,13 +145,16 @@ object IncrementManager {
                     writer.write("        <ele>${pt.ele}</ele>\n")
                     writer.write("        <time>${isoFormat.format(Date(pt.timeMs))}</time>\n")
                     writer.write("        <speed>${pt.speed}</speed>\n")
-                    if (!pt.leanAngleDeg.isNaN() || !pt.longitudinalAccelMps2.isNaN()) {
+                    if (!pt.leanAngleDeg.isNaN() || !pt.longitudinalAccelMps2.isNaN() || pt.signalDbm != Int.MIN_VALUE) {
                         writer.write("        <extensions>\n")
                         if (!pt.leanAngleDeg.isNaN()) {
                             writer.write("          <androtrack:lean>%.2f</androtrack:lean>\n".format(pt.leanAngleDeg))
                         }
                         if (!pt.longitudinalAccelMps2.isNaN()) {
                             writer.write("          <androtrack:accel>%.3f</androtrack:accel>\n".format(pt.longitudinalAccelMps2))
+                        }
+                        if (pt.signalDbm != Int.MIN_VALUE) {
+                            writer.write("          <androtrack:signal>${pt.signalDbm}</androtrack:signal>\n")
                         }
                         writer.write("        </extensions>\n")
                     }

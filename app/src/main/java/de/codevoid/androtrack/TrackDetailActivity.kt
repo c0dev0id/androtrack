@@ -34,6 +34,7 @@ class TrackDetailActivity : AppCompatActivity() {
     private var currentMode = HistogramView.Mode.ALTITUDE
     private var leanAngles: FloatArray = FloatArray(0)
     private var forces: FloatArray = FloatArray(0)
+    private var signalValues: FloatArray = FloatArray(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,6 +55,7 @@ class TrackDetailActivity : AppCompatActivity() {
         binding.chipSpeed.setOnClickListener { switchMode(HistogramView.Mode.SPEED) }
         binding.chipLeanAngle.setOnClickListener { switchMode(HistogramView.Mode.LEAN_ANGLE) }
         binding.chipForce.setOnClickListener { switchMode(HistogramView.Mode.FORCE) }
+        binding.chipSignal.setOnClickListener { switchMode(HistogramView.Mode.SIGNAL) }
 
         binding.histogramView.onPositionChanged = { index -> onHistogramTouch(index) }
         binding.histogramView.onTouchReleased = { onHistogramRelease() }
@@ -82,6 +84,10 @@ class TrackDetailActivity : AppCompatActivity() {
         geoPoints = trackPoints.map { GeoPoint(it.lat, it.lon) }
         leanAngles = computeLeanAngles(trackPoints)
         forces = computeForces(trackPoints)
+        signalValues = FloatArray(trackPoints.size) { i ->
+            val dbm = trackPoints[i].signalDbm
+            if (dbm == Int.MIN_VALUE) Float.NaN else dbm.toFloat()
+        }
 
         setupMap()
         switchMode(HistogramView.Mode.ALTITUDE)
@@ -107,6 +113,7 @@ class TrackDetailActivity : AppCompatActivity() {
         binding.chipSpeed.isChecked = mode == HistogramView.Mode.SPEED
         binding.chipLeanAngle.isChecked = mode == HistogramView.Mode.LEAN_ANGLE
         binding.chipForce.isChecked = mode == HistogramView.Mode.FORCE
+        binding.chipSignal.isChecked = mode == HistogramView.Mode.SIGNAL
 
         val colors = calculateColors(mode)
         val values = calculateValues(mode)
@@ -140,6 +147,9 @@ class TrackDetailActivity : AppCompatActivity() {
                 val maxBrake = forces.filter { it < 0f }.minOrNull() ?: -0.01f
                 forces.map { forceToColor(it, maxAccel, maxBrake) }
             }
+            HistogramView.Mode.SIGNAL -> {
+                trackPoints.map { signalStrengthToColor(it.signalDbm) }
+            }
         }
     }
 
@@ -149,6 +159,7 @@ class TrackDetailActivity : AppCompatActivity() {
             HistogramView.Mode.SPEED -> trackPoints.map { it.speed * 3.6f }.toFloatArray()
             HistogramView.Mode.LEAN_ANGLE -> leanAngles
             HistogramView.Mode.FORCE -> forces
+            HistogramView.Mode.SIGNAL -> signalValues
         }
     }
 
@@ -171,6 +182,26 @@ class TrackDetailActivity : AppCompatActivity() {
         val ratio = ((angle - 5f) / (maxLean - 5f)).coerceIn(0f, 1f)
         val hue = 120f * (1f - ratio)
         return Color.HSVToColor(floatArrayOf(hue, 0.85f, 0.85f))
+    }
+
+    private fun signalStrengthToColor(dbm: Int): Int {
+        if (dbm == Int.MIN_VALUE) return Color.GRAY
+        return when {
+            dbm >= -40  -> Color.rgb(144, 238, 144)
+            dbm >= -80  -> lerpColor(Color.rgb(144, 238, 144), Color.rgb(34, 139, 34), (-40f - dbm) / 40f)
+            dbm >= -95  -> lerpColor(Color.rgb(34, 139, 34), Color.rgb(255, 165, 0), (-80f - dbm) / 15f)
+            dbm >= -100 -> lerpColor(Color.rgb(255, 165, 0), Color.rgb(220, 20, 60), (-95f - dbm) / 5f)
+            else        -> Color.rgb(220, 20, 60)
+        }
+    }
+
+    private fun lerpColor(from: Int, to: Int, t: Float): Int {
+        val tc = t.coerceIn(0f, 1f)
+        return Color.rgb(
+            (Color.red(from)   + tc * (Color.red(to)   - Color.red(from))).toInt(),
+            (Color.green(from) + tc * (Color.green(to) - Color.green(from))).toInt(),
+            (Color.blue(from)  + tc * (Color.blue(to)  - Color.blue(from))).toInt()
+        )
     }
 
     private fun forceToColor(forceG: Float, maxAccel: Float, maxBrake: Float): Int {
@@ -197,6 +228,11 @@ class TrackDetailActivity : AppCompatActivity() {
             }
             HistogramView.Mode.FORCE -> {
                 binding.tvIndicatorAltitude.text = String.format("Force: %.2f G", forces.getOrElse(index) { 0f })
+            }
+            HistogramView.Mode.SIGNAL -> {
+                val dbm = trackPoints[index].signalDbm
+                binding.tvIndicatorAltitude.text =
+                    if (dbm == Int.MIN_VALUE) "Signal: N/A" else "Signal: $dbm dBm"
             }
             else -> {
                 binding.tvIndicatorAltitude.text = String.format("Alt: %.0f m", point.ele)
@@ -270,6 +306,15 @@ class TrackDetailActivity : AppCompatActivity() {
 
         val maxBrakeG = forces.minOrNull() ?: 0f
         binding.tvDetailMaxBrake.text = String.format("%.2f G", abs(maxBrakeG))
+
+        val validSignals = signalValues.filter { !it.isNaN() }
+        if (validSignals.isNotEmpty()) {
+            binding.rowSignalStats.visibility = View.VISIBLE
+            binding.tvDetailMaxSignal.text = String.format("%d dBm", validSignals.max().toInt())
+            binding.tvDetailMinSignal.text = String.format("%d dBm", validSignals.min().toInt())
+        } else {
+            binding.rowSignalStats.visibility = View.GONE
+        }
     }
 
     // --- Lean angle computation from GPS trajectory ---

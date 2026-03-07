@@ -61,4 +61,7 @@
     <string name="pref_battery_opt_title">Battery optimization</string>
     <string name="pref_battery_opt_disabled">Unrestricted (recommended)</string>
     <string name="pref_battery_opt_enabled">Optimized — tap to change</string>
+    <string name="signal">Signal</string>
+    <string name="max_signal">Best Signal</string>
+    <string name="min_signal">Worst Signal</string>
 </resources>

@@ -20,7 +20,8 @@ object GpxParser {
         val speed: Float,
         val ele: Double = 0.0,
         val leanAngleDeg: Float = Float.NaN,
-        val longitudinalAccelMps2: Float = Float.NaN
+        val longitudinalAccelMps2: Float = Float.NaN,
+        val signalDbm: Int = Int.MIN_VALUE
     )
 
     fun parse(file: File): RideItem? {
@@ -97,6 +98,7 @@ object GpxParser {
             var ele = 0.0
             var lean = Float.NaN
             var accel = Float.NaN
+            var signal = Int.MIN_VALUE
             var inTrkpt = false
             var currentTag = ""
 
@@ -116,6 +118,7 @@ object GpxParser {
                                 ele = 0.0
                                 lean = Float.NaN
                                 accel = Float.NaN
+                                signal = Int.MIN_VALUE
                             }
                         }
                     }
@@ -128,6 +131,7 @@ object GpxParser {
                                 "ele" -> ele = text.toDoubleOrNull() ?: 0.0
                                 "androtrack:lean" -> lean = text.toFloatOrNull() ?: Float.NaN
                                 "androtrack:accel" -> accel = text.toFloatOrNull() ?: Float.NaN
+                                "androtrack:signal" -> signal = text.toIntOrNull() ?: Int.MIN_VALUE
                             }
                         }
                     }
@@ -141,7 +145,7 @@ object GpxParser {
                                 if (inTrkpt) {
                                     inTrkpt = false
                                     if (lat != 0.0 || lon != 0.0) {
-                                        val pt = TrackPoint(lat, lon, timeMs, speed, ele, lean, accel)
+                                        val pt = TrackPoint(lat, lon, timeMs, speed, ele, lean, accel, signal)
                                         currentSegment?.add(pt) ?: orphanPoints.add(pt)
                                     }
                                 }

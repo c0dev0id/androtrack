@@ -125,6 +125,7 @@ class RideListActivity : AppCompatActivity() {
         private val REQUIRED_PERMISSIONS = buildList {
             add(Manifest.permission.ACCESS_FINE_LOCATION)
             add(Manifest.permission.ACCESS_COARSE_LOCATION)
+            add(Manifest.permission.READ_PHONE_STATE)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
             }

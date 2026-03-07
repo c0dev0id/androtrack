@@ -15,7 +15,7 @@ class HistogramView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
-    enum class Mode { ALTITUDE, SPEED, LEAN_ANGLE, FORCE }
+    enum class Mode { ALTITUDE, SPEED, LEAN_ANGLE, FORCE, SIGNAL }
 
     var mode: Mode = Mode.ALTITUDE
         set(value) {
