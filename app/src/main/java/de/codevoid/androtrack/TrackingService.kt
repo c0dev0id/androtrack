@@ -24,7 +24,9 @@ import android.os.Looper
 import android.os.PowerManager
 import android.telephony.PhoneStateListener
 import android.telephony.SignalStrength
+import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import java.io.File
@@ -113,6 +115,7 @@ class TrackingService : Service() {
     private var bikeSensorManager: BikeSensorManager? = null
     private var sensorRecordingEnabled = true
     private var telephonyManager: TelephonyManager? = null
+    private var telephonyCallback: Any? = null  // holds TelephonyCallback on API 31+
     private var currentSignalDbm: Int = Int.MIN_VALUE
 
     @Suppress("DEPRECATION")
@@ -140,19 +143,49 @@ class TrackingService : Service() {
         }
     }
 
-    @Suppress("DEPRECATION")
     private fun startSignalListener() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE)
                 != PackageManager.PERMISSION_GRANTED) return
         telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            startSignalListenerModern()
+        } else {
+            startSignalListenerLegacy()
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun startSignalListenerModern() {
+        val cb = object : TelephonyCallback(), TelephonyCallback.SignalStrengthsListener {
+            override fun onSignalStrengthsChanged(signalStrength: SignalStrength) {
+                currentSignalDbm = readDbm(signalStrength)
+            }
+        }
+        telephonyCallback = cb
+        telephonyManager?.registerTelephonyCallback(ContextCompat.getMainExecutor(this), cb)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun startSignalListenerLegacy() {
         telephonyManager?.listen(phoneStateListener, PhoneStateListener.LISTEN_SIGNAL_STRENGTHS)
     }
 
     @Suppress("DEPRECATION")
     private fun stopSignalListener() {
-        telephonyManager?.listen(phoneStateListener, PhoneStateListener.LISTEN_NONE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            stopSignalListenerModern()
+        } else {
+            telephonyManager?.listen(phoneStateListener, PhoneStateListener.LISTEN_NONE)
+        }
         telephonyManager = null
         currentSignalDbm = Int.MIN_VALUE
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    private fun stopSignalListenerModern() {
+        val cb = telephonyCallback as? TelephonyCallback ?: return
+        telephonyManager?.unregisterTelephonyCallback(cb)
+        telephonyCallback = null
     }
 
     private val trackPoints = mutableListOf<GpxTrackPoint>()
@@ -206,6 +239,11 @@ class TrackingService : Service() {
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
+            // Feed GPS speed to sensor manager for lean angle auto-calibration
+            if (location.hasSpeed()) {
+                bikeSensorManager?.updateSpeed(location.speed * 3.6f)  // m/s → km/h
+            }
+
             // Track GPS accuracy
             if (location.hasAccuracy()) {
                 currentAccuracy = location.accuracy

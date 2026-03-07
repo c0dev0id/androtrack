@@ -41,6 +41,13 @@ class BikeSensorManager(context: Context) : SensorEventListener {
     private var filteredLean = 0f
     private var filteredAccel = 0f
 
+    // Auto-calibration: re-zero lean when stationary (mirrors androbuttons SensorsPane logic)
+    private val ACCEL_STILL_THRESHOLD_MPS2 = 0.70f
+    private val SPEED_STILL_THRESHOLD_KMH  = 5.0f
+    private val STATIONARY_DURATION_MS     = 3000L
+    @Volatile private var currentSpeedKmh: Float = 0f  // written from main thread (GPS), read on sensor thread
+    private var stationaryStartMs: Long = 0L            // only accessed on sensor thread
+
     // Output values read by TrackingService GPS callback
     @Volatile var leanAngleDeg: Float = 0f
         private set
@@ -62,6 +69,8 @@ class BikeSensorManager(context: Context) : SensorEventListener {
         isActive = rotationSensor != null
         pendingCalibration = true
         isCalibrated = false
+        stationaryStartMs = 0L
+        currentSpeedKmh = 0f
     }
 
     fun stop() {
@@ -70,6 +79,12 @@ class BikeSensorManager(context: Context) : SensorEventListener {
         isCalibrated = false
         lastRotationTimestampNs = 0L
         lastAccelTimestampNs = 0L
+        stationaryStartMs = 0L
+        currentSpeedKmh = 0f
+    }
+
+    fun updateSpeed(speedKmh: Float) {
+        currentSpeedKmh = speedKmh
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -138,6 +153,7 @@ class BikeSensorManager(context: Context) : SensorEventListener {
         val ax = event.values[0]
         val ay = event.values[1]
         val az = event.values[2]
+        val rawMagnitude = sqrt(ax * ax + ay * ay + az * az)
 
         // Rotate device-frame acceleration to world frame: a_world = R_live * a_device
         val awx = liveRotationMatrix[0]*ax + liveRotationMatrix[1]*ay + liveRotationMatrix[2]*az
@@ -158,6 +174,36 @@ class BikeSensorManager(context: Context) : SensorEventListener {
         }
         lastAccelTimestampNs = event.timestamp
         longitudinalAccel = filteredAccel
+
+        // Auto-recalibration: re-zero lean when stationary for STATIONARY_DURATION_MS
+        if (rawMagnitude < ACCEL_STILL_THRESHOLD_MPS2 && currentSpeedKmh < SPEED_STILL_THRESHOLD_KMH) {
+            val nowMs = System.currentTimeMillis()
+            if (stationaryStartMs == 0L) {
+                stationaryStartMs = nowMs
+            } else if (nowMs - stationaryStartMs >= STATIONARY_DURATION_MS) {
+                triggerAutoCalibration()
+                stationaryStartMs = 0L
+            }
+        } else {
+            stationaryStartMs = 0L
+        }
+    }
+
+    private fun triggerAutoCalibration() {
+        liveRotationMatrix.copyInto(refRotationMatrix)
+        transpose3x3(refRotationMatrix, refRotationMatrixInv)
+        val fx = refRotationMatrix[1]
+        val fy = refRotationMatrix[4]
+        val len = sqrt(fx * fx + fy * fy)
+        if (len > 0.001f) {
+            forwardWorld[0] = fx / len
+            forwardWorld[1] = fy / len
+            forwardWorld[2] = 0f
+        } else {
+            forwardWorld[0] = 1f; forwardWorld[1] = 0f; forwardWorld[2] = 0f
+        }
+        filteredLean = 0f
+        // filteredAccel intentionally NOT reset — it is a real physical reading
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
