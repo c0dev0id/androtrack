@@ -185,6 +185,7 @@ private fun TrackDetailContent(
         }
 
         DisposableEffect(Unit) {
+            mapView.onResume()
             onDispose { mapView.onPause() }
         }
 
@@ -194,41 +195,16 @@ private fun TrackDetailContent(
                 .fillMaxWidth()
                 .height(320.dp),
             update = { mv ->
-                mv.onResume()
                 if (geoPoints.isNotEmpty() && mv.overlays.none { it is GradientTrackOverlay }) {
                     val minLat = data.trackPoints.minOf { it.lat }
                     val maxLat = data.trackPoints.maxOf { it.lat }
                     val minLon = data.trackPoints.minOf { it.lon }
                     val maxLon = data.trackPoints.maxOf { it.lon }
                     val boundingBox = BoundingBox(maxLat, maxLon, minLat, minLon)
-                    mv.post { mv.zoomToBoundingBox(boundingBox, true, 60) }
+                    mv.post { mv.zoomToBoundingBox(boundingBox, false, 60) }
                 }
             }
         )
-
-        // Indicator overlay (shown when touching histogram)
-        if (indicatorIndex >= 0) {
-            val texts = getIndicatorText(indicatorIndex)
-            if (texts != null) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    color = SurfaceCard
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(texts.first, style = MaterialTheme.typography.bodyMedium, color = Orange600)
-                        Text(texts.second, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            }
-        } else {
-            Spacer(modifier = Modifier.height(4.dp))
-        }
 
         // Mode filter chips
         FlowRow(
@@ -254,28 +230,53 @@ private fun TrackDetailContent(
             }
         }
 
-        // Histogram
-        AndroidView(
-            factory = { ctx ->
-                HistogramView(ctx).apply {
-                    layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        200.dpToPx(ctx)
-                    )
-                    onPositionChanged = { index -> onHistogramTouch(index) }
-                    onTouchReleased = { onHistogramRelease() }
-                }
-            },
+        // Histogram with overlaid indicator bar
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(160.dp),
-            update = { histogram ->
-                histogram.mode = currentMode
-                if (histogramValues.isNotEmpty() && colors.isNotEmpty()) {
-                    histogram.setData(histogramValues, colors.toIntArray())
+                .height(160.dp)
+        ) {
+            AndroidView(
+                factory = { ctx ->
+                    HistogramView(ctx).apply {
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            200.dpToPx(ctx)
+                        )
+                        onPositionChanged = { index -> onHistogramTouch(index) }
+                        onTouchReleased = { onHistogramRelease() }
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+                update = { histogram ->
+                    histogram.mode = currentMode
+                    if (histogramValues.isNotEmpty() && colors.isNotEmpty()) {
+                        histogram.setData(histogramValues, colors.toIntArray())
+                    }
+                }
+            )
+            if (indicatorIndex >= 0) {
+                val texts = getIndicatorText(indicatorIndex)
+                if (texts != null) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.TopCenter)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        color = SurfaceCard
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(texts.first, style = MaterialTheme.typography.bodyMedium, color = Orange600)
+                            Text(texts.second, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
                 }
             }
-        )
+        }
 
         // Statistics card
         Surface(

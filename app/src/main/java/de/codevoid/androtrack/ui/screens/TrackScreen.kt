@@ -35,6 +35,8 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -58,13 +60,19 @@ import de.codevoid.androtrack.ui.theme.Destructive
 import de.codevoid.androtrack.ui.theme.Orange600
 import de.codevoid.androtrack.ui.theme.PausedAmber
 import de.codevoid.androtrack.ui.theme.SurfaceCard
+import androidx.lifecycle.viewmodel.compose.viewModel
+import de.codevoid.androtrack.viewmodel.SettingsViewModel
 import de.codevoid.androtrack.viewmodel.TrackingState
 import de.codevoid.androtrack.viewmodel.TrackingViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TrackScreen(trackingViewModel: TrackingViewModel) {
+fun TrackScreen(
+    trackingViewModel: TrackingViewModel,
+    settingsViewModel: SettingsViewModel = viewModel()
+) {
     val trackingState by trackingViewModel.state.collectAsState()
+    val settings by settingsViewModel.settings.collectAsState()
     val context = LocalContext.current
 
     var permissionDenied by remember { mutableStateOf(false) }
@@ -91,7 +99,8 @@ fun TrackScreen(trackingViewModel: TrackingViewModel) {
         AnimatedContent(
             targetState = trackingState,
             transitionSpec = { fadeIn() togetherWith fadeOut() },
-            label = "track_state"
+            label = "track_state",
+            contentKey = { it::class }
         ) { state ->
             when (state) {
                 is TrackingState.Idle -> {
@@ -118,7 +127,11 @@ fun TrackScreen(trackingViewModel: TrackingViewModel) {
                 is TrackingState.Active -> {
                     ActiveContent(
                         state = state,
-                        onStop = { trackingViewModel.stopTracking() }
+                        onStop = { trackingViewModel.stopTracking() },
+                        emulatePower = settings.emulatePower,
+                        onEmulatePowerChange = {
+                            settingsViewModel.updateSettings(settings.copy(emulatePower = it))
+                        }
                     )
                 }
             }
@@ -199,7 +212,9 @@ private fun IdleContent(
 @Composable
 private fun ActiveContent(
     state: TrackingState.Active,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    emulatePower: Boolean,
+    onEmulatePowerChange: (Boolean) -> Unit
 ) {
     val stats = state.stats
     val isPaused = state.isPaused
@@ -238,6 +253,16 @@ private fun ActiveContent(
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (stats.fileName.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stats.fileName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
             }
 
             // Secondary stats row
@@ -296,6 +321,33 @@ private fun ActiveContent(
                         textAlign = TextAlign.Center
                     )
                 }
+            }
+
+            // Emulate power toggle
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "Emulate power",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Record regardless of charger",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = emulatePower,
+                    onCheckedChange = onEmulatePowerChange,
+                    colors = SwitchDefaults.colors(checkedTrackColor = Orange600)
+                )
             }
 
             // Stop button
